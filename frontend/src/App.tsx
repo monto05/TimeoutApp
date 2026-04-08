@@ -86,7 +86,8 @@ type EstadoRemoto = {
   sedes?: Sede[] | null
 }
 
-const API_STATE_URL = '/api/state'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
+const API_STATE_URL = `${API_BASE_URL}/api/state`
 const API_SYNC_DEBOUNCE_MS = 900
 
 const permisosIniciales: PermisoUsuario[] = [

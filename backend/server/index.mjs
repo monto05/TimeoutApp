@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { MongoClient } from 'mongodb'
+import { existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import path from 'path'
 
@@ -149,10 +150,12 @@ app.put('/api/state', async (req, res) => {
 // Servir el frontend compilado en producción (debe ir DESPUÉS de las rutas /api)
 if (EN_PRODUCCION) {
   const distPath = path.join(__dirname, '../../frontend/dist')
-  app.use(express.static(distPath))
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'))
-  })
+  if (existsSync(distPath)) {
+    app.use(express.static(distPath))
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'))
+    })
+  }
 }
 
 app.listen(PORT, () => {

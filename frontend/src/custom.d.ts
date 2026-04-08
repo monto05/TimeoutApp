@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 // Declaraciones para permitir imports de recursos como texto con `?raw`
 declare module '*?raw' {
   const content: string
