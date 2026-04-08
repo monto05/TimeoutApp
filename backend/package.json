@@ -1,0 +1,25 @@
+{
+  "name": "timeout-backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.mjs",
+    "start": "node server/index.mjs",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "extract:pdf": "node scripts/extract-pdf.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "mongodb": "^6.16.0",
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.2"
+  }
+}

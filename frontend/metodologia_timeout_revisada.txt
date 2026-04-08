@@ -1,0 +1,53 @@
+PRINCIPIOS BÁSICOS
+
+- Alta repetición con intención + ritmo real.
+- Entrenamos para jugar mejor: todo debe transferirse al juego.
+- Enseñamos soluciones en contexto real (no técnica aislada).
+
+NIVELES RESTRUCTURADOS
+
+1) SKILLS (Habilidades)
+- Descripción: Fundamentos técnicos y mecánicos. Trabajo individual sobre ejecución (bote, finalizaciones, tiro, footwork).
+- Objetivo: Precisión, consistencia y mecanización del gesto.
+- Mapeo: Grupo “C” / BRONCE.
+
+2) GAME SKILLS (Habilidades de juego)
+- Descripción: Aplicación de los skills en contextos de 1c1 o situaciones simples; lectura básica del defensor y toma de decisiones.
+- Objetivo: Transferir el gesto a situaciones reconocibles y con presión limitada.
+- Mapeo: Grupo “ESTÁNDAR” / PLATA.
+
+3) GAME ACTION (Acción de juego)
+- Descripción: Secuencias, encadenamientos, timing con compañero/oponente, respuestas a defensas variadas.
+- Objetivo: Ejecutar combinaciones eficaces y adaptativas en contextos dinámicos.
+- Mapeo: Grupo “RAISING STAR” / AZUL.
+
+4) PLAYER TO GO (Jugador en partido)
+- Descripción: Toma de decisiones en partido, adaptación a handicaps, gestión táctica y posicionamiento específico.
+- Objetivo: Rendimiento estable en situaciones reales y complejas.
+- Mapeo: Posición de juego / ORO (etiqueta adicional por rol).
+
+CONEXIÓN CONTEXTOS — DIFICULTADES — HANDICAPS → NIVELES
+
+Regla general: asigna cada Contexto (C#), Dificultad (D#) y Handicap (H#) al nivel donde el jugador debe dominarlo.
+
+Ejemplo de mapeo sugerido:
+- SKILLS: C1 (triple amenaza estático), C2 (llegada en carrera), D1 (control ritmo básico), H2 (condiciones espacio-temporales simples).
+- GAME SKILLS: C3 (closeouts), C4 (BD variadas), D2 (recuperación defensiva), H1 (posiciones de contacto controladas).
+- GAME ACTION: C5 (situaciones de juego/zipper, DHO+BD), C6 (lectura del defensor), D3 (variaciones de velocidad), H4 (condiciones ofensivas encadenadas).
+- PLAYER TO GO: C7–C10 (pick&pop, poste, continuaciones, tiro en partido), D4 (recuperación rápida del defensor), H3 (limitaciones defensivas reales), escenarios combinados de alta complejidad.
+
+HOJA DE SESIÓN (Plantilla mínima)
+- Objetivo de la sesión
+- Nivel objetivo (Skills / Game Skills / Game Action / Player To Go)
+- Zona de trabajo (1/2/3)
+- Contexto(s) (C#)
+- Gesto(s) a trabajar
+- Dificultad (D#) y Handicap(s) (H#)
+- Volumen / métricas (precisión, velocidad, adaptabilidad)
+
+SUGERENCIAS DE IMPLEMENTACIÓN
+- Para pasar de un nivel a otro: demostrar dominio en múltiples contextos y handicaps (no solo en una tarea aislada).
+- Mantener registros breves por jugador: nivel actual, contextos dominados, próximos objetivos.
+- Etiquetar ejercicios con `Nivel / Zona / Contexto / Handicap` para facilitar progresión y filtrado en entrenamientos.
+
+NOTA: Si quieres, aplico estas secciones directamente sobre el texto extraído del PDF y genero una versión completa que reemplace o acompañe al original.

@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String      @id @default(uuid())
+  email     String      @unique
+  name      String?
+  role      UserRole    @default(COACH)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  sessions  Session[]
+  notes     Note[]
+  auditLogs AuditLog[]
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  title      String
+  status     SessionStatus @default(DRAFT)
+  startedAt  DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  ownerId    String
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  timeouts   Timeout[]
+  notes      Note[]
+
+  @@index([ownerId])
+}
+
+model Timeout {
+  id          String   @id @default(uuid())
+  sessionId   String
+  startedAt   DateTime
+  endedAt     DateTime?
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  session     Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model Note {
+  id         String   @id @default(uuid())
+  content    String
+  userId     String
+  sessionId  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session    Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  action      String
+  entity      String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([actorUserId])
+  @@index([entity, entityId])
+}
+
+model AppSnapshot {
+  id          String   @id
+  jugadores   Json
+  recursos    Json
+  entrenadores Json
+  sesiones    Json
+  permisos    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  COACH
+  VIEWER
+}
+
+enum SessionStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+  ARCHIVED
+}
