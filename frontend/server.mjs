@@ -28,6 +28,6 @@ app.get('*', (_req, res) => {
   res.sendFile(indexPath)
 })
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Frontend running on port ${PORT}`)
 })

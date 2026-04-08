@@ -43,6 +43,10 @@ const obtenerColeccionSnapshots = async () => {
 app.use(cors())
 app.use(express.json({ limit: '2mb' }))
 
+app.get('/', (_req, res) => {
+  res.status(200).json({ ok: true, service: 'timeout-backend' })
+})
+
 app.get('/api/health', async (_req, res) => {
   try {
     await (await obtenerColeccionSnapshots()).findOne({ _id: 'default' })
@@ -141,8 +145,8 @@ app.put('/api/state', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`API Timeout escuchando en http://localhost:${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`API Timeout escuchando en http://0.0.0.0:${PORT}`)
 })
 
 process.on('SIGINT', async () => {
