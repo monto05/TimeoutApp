@@ -140,8 +140,8 @@ function normalizarPosicionJugador(posicion: string): PosicionRecurso {
 function inferirPosicionRecurso(nombre: string): PosicionRecurso {
   const prefijo = nombre.split('·')[0].trim().toUpperCase()
   if (prefijo.startsWith('BASE')) return 'Base'
-  if (prefijo.startsWith('SILLA')) return 'Escolta'
-  if (prefijo.startsWith('ALEROS')) return 'Alero'
+  if (prefijo.startsWith('ESCOLTA')) return 'Escolta'
+  if (prefijo.startsWith('ALERO')) return 'Alero'
   if (prefijo.startsWith('ALA PÍVOT') || prefijo.startsWith('ALA PIVOT')) return 'Ala Pívot'
   if (prefijo.startsWith('PÍVOT') || prefijo.startsWith('PIVOT')) return 'Pívot'
   return 'General'
@@ -162,7 +162,7 @@ function inferirNivelRecurso(nombre: string): NivelRecurso {
   if (/^H2\b/i.test(code)) return 'Bronce'
   if (/^H3\b/i.test(code)) return 'Oro'
   if (/^H4\b/i.test(code)) return 'Azul'
-  if (/^BASE\b|^SILLA\b/i.test(code)) return 'Plata'
+  if (/^BASE\b|^ESCOLTA\b/i.test(code)) return 'Plata'
   if (/^ALEROS\b/i.test(code)) return 'Azul'
   if (/^ALA PÍVOT\b|^ALA PIVOT\b|^PÍVOT\b|^PIVOT\b/i.test(code)) return 'Oro'
   return 'Bronce'
@@ -469,28 +469,28 @@ const recursosIniciales: Recurso[] = [
   },
   {
     id: 33,
-    nombre: 'SILLA · Finalizaciones y apoyos laterales',
+    nombre: 'ESCOLTA · Finalizaciones y apoyos laterales',
     grupo: 'Sesión',
     bloque: 'Técnica',
     descripcion: '1 paso, mismo pie y mano, mano contraria, batida, floater, runner, spin, stride stop.',
   },
   {
     id: 34,
-    nombre: 'SILLA · Contactos por bote y agarre',
+    nombre: 'ESCOLTA · Contactos por bote y agarre',
     grupo: 'Handicaps',
     bloque: 'Táctica',
     descripcion: 'Bump+step, bump+runner, bump+euro, bump+swing, veer finish, body-body.',
   },
   {
     id: 35,
-    nombre: 'SILLA · Catch y generar espacio',
+    nombre: 'ESCOLTA · Catch y generar espacio',
     grupo: 'Recursos',
     bloque: 'Técnica',
     descripcion: 'Side jab, cross, lilliard, spin pivot, catch&go, split catch, hip rotation+combos.',
   },
   {
     id: 36,
-    nombre: 'SILLA · Tiro + footwork',
+    nombre: 'ESCOLTA · Tiro + footwork',
     grupo: 'Dificultades',
     bloque: 'Táctica',
     descripcion: 'Reactivo (hop, 1-2, step-in, side-step) y gestos de carrera/frenada (push cross, under drag).',
@@ -2638,7 +2638,11 @@ function App() {
                 </div>
 
                 <div className="mt-5 grid gap-3">
-                  {recursos.map((recurso) => (
+                  {recursos.map((recurso) => {
+                    const totalJugadores = jugadores.length
+                    const trabajados = jugadores.filter((j) => j.recursosTrabajados.includes(recurso.id)).length
+                    const pendientes = totalJugadores - trabajados
+                    return (
                     <div key={recurso.id} className="rounded-xl border border-white/10 bg-slate-950/35 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -2646,6 +2650,16 @@ function App() {
                           <p className="mt-1 text-xs text-slate-400">
                             {recurso.grupo} · {recurso.bloque} · {recurso.posicion ?? inferirPosicionRecurso(recurso.nombre)} · {recurso.nivel ?? inferirNivelRecurso(recurso.nombre)} · Método Timeout
                           </p>
+                          {totalJugadores > 0 && (
+                            <div className="mt-2 flex gap-2">
+                              <span className="rounded-full border border-emerald-300/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                ✓ Trabajado: {trabajados}
+                              </span>
+                              <span className="rounded-full border border-amber-300/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                                ⏳ Pendiente: {pendientes}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -2657,7 +2671,8 @@ function App() {
                       </div>
                       <p className="mt-2 text-xs leading-relaxed text-slate-300">{recurso.descripcion}</p>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             ) : null}
