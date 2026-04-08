@@ -227,8 +227,17 @@ function mezclarRecursosConIniciales(recursosActuales: Recurso[]): Recurso[] {
 }
 
 function normalizarPermisos(permisos: PermisoUsuario[]): PermisoUsuario[] {
-  return permisos.map((permiso) => ({
+  const normalizados = permisos
+    .map((permiso) => ({
     correo: normalizarCorreo(permiso.correo ?? ''),
+    password: String(permiso.password ?? PASSWORD_INICIAL),
+    }))
+    .filter((permiso) => permiso.correo.includes('@'))
+
+  if (normalizados.length > 0) return normalizados
+
+  return permisosIniciales.map((permiso) => ({
+    correo: normalizarCorreo(permiso.correo),
     password: String(permiso.password ?? PASSWORD_INICIAL),
   }))
 }
