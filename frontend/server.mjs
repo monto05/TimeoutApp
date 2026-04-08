@@ -1,11 +1,20 @@
 import express from 'express'
 import path from 'path'
+import { existsSync } from 'fs'
 
 const app = express()
 const PORT = process.env.PORT || 8080
-const distPath = path.resolve('./dist')
+const distCandidates = [
+  path.resolve('./dist'),
+  path.resolve('./frontend/dist'),
+  path.resolve(process.cwd(), 'dist'),
+  path.resolve(process.cwd(), 'frontend/dist'),
+]
+const distPath = distCandidates.find((candidate) => existsSync(candidate)) ?? path.resolve('./dist')
 
 console.log('=== SERVER DEBUG ===')
+console.log('cwd:', process.cwd())
+console.log('distCandidates:', distCandidates)
 console.log('distPath:', distPath)
 console.log('==================')
 
