@@ -4,3 +4,6 @@ dist
 .vscode/*.log
 .env
 backend/.env
+**/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
