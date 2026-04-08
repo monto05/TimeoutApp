@@ -2,12 +2,6 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { MongoClient } from 'mongodb'
-import { existsSync } from 'fs'
-import { fileURLToPath } from 'url'
-import path from 'path'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const EN_PRODUCCION = process.env.NODE_ENV === 'production'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 3001)
@@ -146,17 +140,6 @@ app.put('/api/state', async (req, res) => {
     })
   }
 })
-
-// Servir el frontend compilado en producción (debe ir DESPUÉS de las rutas /api)
-if (EN_PRODUCCION) {
-  const distPath = path.join(__dirname, '../../frontend/dist')
-  if (existsSync(distPath)) {
-    app.use(express.static(distPath))
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'))
-    })
-  }
-}
 
 app.listen(PORT, () => {
   console.log(`API Timeout escuchando en http://localhost:${PORT}`)
