@@ -750,6 +750,7 @@ const gruposRecurso: GrupoRecurso[] = ['Recursos', 'Dificultades', 'Handicaps', 
 const bloquesRecurso: BloqueRecurso[] = ['Técnica']
 const categoriasJugador = Object.keys(plantillaAspectosPorCategoria)
 const diasSemanaNombre = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+const horasSugeridas = ['09:00', '10:00', '11:00', '12:00', '13:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
 
 function formatearFechaISO(fecha: Date) {
   const anio = fecha.getFullYear()
@@ -882,7 +883,7 @@ function App() {
     equipo: '',
     categoria: 'Bronce (Grupo C)',
     nivel: 'Skills (Bronce)',
-    posicion: '',
+    posicion: 'Base',
     edad: '15',
   })
 
@@ -1247,15 +1248,20 @@ function App() {
 
   const matchActual = sugerenciasMatch[0]
 
+  const posicionFiltroRecursosJugador = useMemo(
+    () => (jugadorActivo ? normalizarPosicionJugador(jugadorActivo.posicion) : posicionRecursoActiva),
+    [jugadorActivo, posicionRecursoActiva],
+  )
+
   const recursosVisibles = useMemo(
     () =>
       recursos.filter((recurso) => {
         if (recurso.grupo !== grupoRecursoActivo) return false
         const posicion = recurso.posicion ?? inferirPosicionRecurso(recurso.nombre)
         const nivel = recurso.nivel ?? inferirNivelRecurso(recurso.nombre)
-        return (posicion === 'General' || posicion === posicionRecursoActiva) && nivel === nivelRecursoActivo
+        return (posicion === 'General' || posicion === posicionFiltroRecursosJugador) && nivel === nivelRecursoActivo
       }),
-    [grupoRecursoActivo, nivelRecursoActivo, posicionRecursoActiva, recursos],
+    [grupoRecursoActivo, nivelRecursoActivo, posicionFiltroRecursosJugador, recursos],
   )
 
   const pendientesDelGrupo = useMemo(
@@ -1355,11 +1361,16 @@ function App() {
     const nombre = formNuevoJugador.nombre.trim()
     const fotoUrl = formNuevoJugador.fotoUrl.trim()
     const equipo = formNuevoJugador.equipo.trim()
-    const posicion = formNuevoJugador.posicion.trim()
+    const posicion = formNuevoJugador.posicion.trim() as PosicionRecurso
     const edadNumero = Number(formNuevoJugador.edad)
 
     if (!nombre || !equipo || !posicion || Number.isNaN(edadNumero)) {
       setMensajeJugador('Completa nombre, equipo, posición y edad válidos.')
+      return
+    }
+
+    if (!posicionesRecurso.includes(posicion)) {
+      setMensajeJugador('La posición debe ser Base, Escolta, Alero, Ala Pívot o Pívot.')
       return
     }
 
@@ -1389,7 +1400,7 @@ function App() {
       equipo: '',
       categoria: formNuevoJugador.categoria,
       nivel: formNuevoJugador.nivel ?? formNuevoJugador.categoria,
-      posicion: '',
+      posicion: 'Base',
       edad: '15',
     })
     setMensajeJugador('Jugador añadido correctamente.')
@@ -1601,6 +1612,21 @@ function App() {
 
     setSesionFeedbackAbiertaId(null)
     setTextoFeedbackSesion('')
+  }
+
+  const eliminarFeedbackSesion = (feedbackId: number) => {
+    if (!puedeEditar) {
+      registrarBloqueo('No puedes eliminar feedback en modo visualizador.')
+      return
+    }
+
+    const feedback = feedbackSesiones.find((item) => item.id === feedbackId)
+    if (feedback && sesionFeedbackAbiertaId === feedback.sesionId) {
+      setSesionFeedbackAbiertaId(null)
+      setTextoFeedbackSesion('')
+    }
+
+    setFeedbackSesiones((previo) => previo.filter((item) => item.id !== feedbackId))
   }
 
   const descartarMatchActual = () => {
@@ -2246,13 +2272,18 @@ function App() {
                           </option>
                         ))}
                       </select>
-                      <input
+                      <select
                         value={formNuevoJugador.posicion}
                         onChange={(evento) => setFormNuevoJugador((previo) => ({ ...previo, posicion: evento.target.value }))}
-                        placeholder="Posición"
                         disabled={!puedeEditar}
-                        className="rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-xs text-white outline-none placeholder:text-slate-400"
-                      />
+                        className="rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-xs text-white outline-none"
+                      >
+                        {posicionesRecurso.map((posicion) => (
+                          <option key={posicion} value={posicion}>
+                            {posicion}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <input
                       value={formNuevoJugador.edad}
@@ -2525,12 +2556,18 @@ function App() {
                   disabled={!puedeEditar}
                   className="rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-xs text-white outline-none"
                 />
-                <input
-                  value={jugadorActivo.posicion}
+                <select
+                  value={normalizarPosicionJugador(jugadorActivo.posicion)}
                   onChange={(evento) => actualizarCampoJugadorActivo('posicion', evento.target.value)}
                   disabled={!puedeEditar}
                   className="rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-xs text-white outline-none"
-                />
+                >
+                  {posicionesRecurso.map((posicion) => (
+                    <option key={posicion} value={posicion}>
+                      {posicion}
+                    </option>
+                  ))}
+                </select>
                 <input
                   value={jugadorActivo.edad}
                   type="number"
@@ -2606,26 +2643,9 @@ function App() {
                   })}
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {posicionesRecurso.map((posicion) => {
-                    const activa = posicionRecursoActiva === posicion
-
-                    return (
-                      <button
-                        key={posicion}
-                        type="button"
-                        onClick={() => setPosicionRecursoActiva(posicion)}
-                        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                          activa
-                            ? 'border-violet-300/60 bg-violet-500/20 text-violet-100'
-                            : 'border-white/20 bg-white/5 text-slate-200 hover:bg-white/10'
-                        }`}
-                      >
-                        {posicion}
-                      </button>
-                    )
-                  })}
-                </div>
+                <p className="mt-3 rounded-lg border border-violet-300/30 bg-violet-500/10 px-3 py-2 text-xs text-violet-100">
+                  Filtro automático por posición del jugador: <span className="font-semibold">{posicionFiltroRecursosJugador}</span>
+                </p>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {nivelesRecurso.map((nivel) => {
@@ -2654,7 +2674,7 @@ function App() {
                 </p>
 
                 <p className="mt-1 text-xs text-slate-400">
-                  Posición activa: <span className="font-semibold text-slate-200">{posicionRecursoActiva}</span>
+                  Posición activa: <span className="font-semibold text-slate-200">{posicionFiltroRecursosJugador}</span>
                 </p>
 
                 <p className="mt-1 text-xs text-slate-400">
@@ -2718,6 +2738,15 @@ function App() {
                           </p>
                           <p className="mt-1 text-[11px] text-slate-300">Entrenador: {entrenador?.nombre ?? 'Sin entrenador'}</p>
                           <p className="mt-2 text-xs text-slate-200">{feedback.comentario}</p>
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => eliminarFeedbackSesion(feedback.id)}
+                              className="rounded border border-rose-300/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-100"
+                            >
+                              Eliminar comentario
+                            </button>
+                          </div>
                         </div>
                       )
                     })}
@@ -3315,6 +3344,22 @@ function App() {
                                 onChange={(e) => setFormMatch((p) => ({ ...p, hora: e.target.value }))}
                                 className="rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1.5 text-xs text-white outline-none"
                               />
+                              <div className="flex flex-wrap gap-1">
+                                {horasSugeridas.map((hora) => (
+                                  <button
+                                    key={`match-hora-${hora}`}
+                                    type="button"
+                                    onClick={() => setFormMatch((p) => ({ ...p, hora }))}
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      formMatch.hora === hora
+                                        ? 'border-blue-300/60 bg-blue-500/20 text-blue-100'
+                                        : 'border-white/20 bg-white/5 text-slate-300'
+                                    }`}
+                                  >
+                                    {hora}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                             <div className="grid gap-1">
                               <label className="text-[10px] text-slate-300">Sede</label>
@@ -3396,6 +3441,22 @@ function App() {
                           onChange={(evento) => setFormNuevaSesion((previo) => ({ ...previo, hora: evento.target.value }))}
                           className="rounded-lg border border-white/15 bg-slate-900/60 px-3 py-2 text-xs text-white outline-none"
                         />
+                        <div className="flex flex-wrap gap-1">
+                          {horasSugeridas.map((hora) => (
+                            <button
+                              key={`programar-hora-${hora}`}
+                              type="button"
+                              onClick={() => setFormNuevaSesion((previo) => ({ ...previo, hora }))}
+                              className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
+                                formNuevaSesion.hora === hora
+                                  ? 'border-blue-300/60 bg-blue-500/20 text-blue-100'
+                                  : 'border-white/20 bg-white/5 text-slate-300'
+                              }`}
+                            >
+                              {hora}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div className="grid gap-2">
                         <label className="text-xs text-slate-300">Sede</label>
