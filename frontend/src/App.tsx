@@ -99,12 +99,21 @@ type EstadoRemoto = {
   permisos?: PermisoUsuario[] | null
   sedes?: Sede[] | null
   updatedAt?: string | null
+  versions?: {
+    jugadores?: number
+    recursos?: number
+    entrenadores?: number
+    sesiones?: number
+    feedbackSesiones?: number
+    permisos?: number
+  }
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
 const API_STATE_URL = `${API_BASE_URL}/api/state`
+const API_SESIONES_URL = `${API_BASE_URL}/api/sesiones`
 const API_SYNC_DEBOUNCE_MS = 900
-const API_POLL_INTERVAL_MS = 3000
+const API_POLL_INTERVAL_MS = 1500 // Reducido de 3000 a 1500ms para mejor respuesta en calendario
 
 const permisosIniciales: PermisoUsuario[] = [
   { correo: 'direccion@timeoutworkouts.com', password: 'timeout123' },
@@ -931,6 +940,14 @@ function App() {
   const [estadoRemotoCargado, setEstadoRemotoCargado] = useState(false)
   const omitirPrimerGuardadoRemoto = useRef(true)
   const ultimoUpdatedAtRemoto = useRef<string | null>(null)
+  const versionesLocales = useRef({
+    jugadores: 0,
+    recursos: 0,
+    entrenadores: 0,
+    sesiones: 0,
+    feedbackSesiones: 0,
+    permisos: 0,
+  })
 
   const permisosPorCorreo = useMemo(
     () => new Map(permisos.map((permiso) => [normalizarCorreo(permiso.correo), permiso])),
@@ -1533,6 +1550,39 @@ function App() {
     })
   }
 
+  const guardarSesionesInmediatamente = async (nuevosSesiones: SesionCalendario[], nuevosFeedback: FeedbackSesion[]) => {
+    // Guarda sesiones y feedback al backend inmediatamente sin debounce
+    if (!estadoRemotoCargado) return
+
+    try {
+      const respuesta = await fetch(API_SESIONES_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sesiones: nuevosSesiones,
+          feedbackSesiones: nuevosFeedback,
+        }),
+      })
+
+      if (!respuesta.ok) return
+
+      const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
+      
+      if (typeof payload.updatedAt === 'string') {
+        ultimoUpdatedAtRemoto.current = payload.updatedAt
+      }
+      
+      if (payload.versions) {
+        versionesLocales.current.sesiones = payload.versions.sesiones ?? versionesLocales.current.sesiones
+        versionesLocales.current.feedbackSesiones = payload.versions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
+      }
+    } catch {
+      // Silenciosamente fallar - los datos están en localStorage
+    }
+  }
+
   const anadirSesionCalendario = () => {
     if (!puedeEditar) {
       registrarBloqueo('Intento de crear sesión sin permisos.')
@@ -1561,7 +1611,9 @@ function App() {
       objetivo,
     }
 
-    setSesiones((previo) => [...previo, nuevaSesion])
+    const nuevosSesiones = [...sesiones, nuevaSesion]
+    setSesiones(nuevosSesiones)
+    void guardarSesionesInmediatamente(nuevosSesiones, feedbackSesiones)
     setFormNuevaSesion((previo) => ({ ...previo, objetivo: '', jugadorIds: [] }))
     setFiltroFecha(formNuevaSesion.fecha)
   }
@@ -1571,7 +1623,9 @@ function App() {
       registrarBloqueo('Intento de eliminar sesión sin permisos.')
       return
     }
-    setSesiones((previo) => previo.filter((sesion) => sesion.id !== sesionId))
+    const nuevosSesiones = sesiones.filter((sesion) => sesion.id !== sesionId)
+    setSesiones(nuevosSesiones)
+    void guardarSesionesInmediatamente(nuevosSesiones, feedbackSesiones)
   }
 
   const guardarFeedbackSesion = (sesion: SesionCalendario) => {
@@ -1584,15 +1638,15 @@ function App() {
     if (!comentario) return
 
     const existente = feedbackPorSesionId.get(sesion.id)
+    let nuevosFeedback: FeedbackSesion[]
 
     if (existente) {
-      setFeedbackSesiones((previo) =>
-        previo.map((feedback) =>
-          feedback.sesionId === sesion.id
-            ? { ...feedback, comentario, creadoEn: new Date().toISOString() }
-            : feedback,
-        ),
+      nuevosFeedback = feedbackSesiones.map((feedback) =>
+        feedback.sesionId === sesion.id
+          ? { ...feedback, comentario, creadoEn: new Date().toISOString() }
+          : feedback,
       )
+      setFeedbackSesiones(nuevosFeedback)
     } else {
       const siguienteId = Math.max(0, ...feedbackSesiones.map((feedback) => feedback.id)) + 1
       const nuevoFeedback: FeedbackSesion = {
@@ -1607,9 +1661,11 @@ function App() {
         comentario,
         creadoEn: new Date().toISOString(),
       }
-      setFeedbackSesiones((previo) => [...previo, nuevoFeedback])
+      nuevosFeedback = [...feedbackSesiones, nuevoFeedback]
+      setFeedbackSesiones(nuevosFeedback)
     }
 
+    void guardarSesionesInmediatamente(sesiones, nuevosFeedback)
     setSesionFeedbackAbiertaId(null)
     setTextoFeedbackSesion('')
   }
@@ -1626,7 +1682,9 @@ function App() {
       setTextoFeedbackSesion('')
     }
 
-    setFeedbackSesiones((previo) => previo.filter((item) => item.id !== feedbackId))
+    const nuevosFeedback = feedbackSesiones.filter((item) => item.id !== feedbackId)
+    setFeedbackSesiones(nuevosFeedback)
+    void guardarSesionesInmediatamente(sesiones, nuevosFeedback)
   }
 
   const descartarMatchActual = () => {
@@ -1665,7 +1723,9 @@ function App() {
       jugadorIds: [matchActual.jugadorA.id, matchActual.jugadorB.id],
       objetivo: `Trabajo compartido: ${matchActual.recursosCompartidos.slice(0, 3).join(' · ')}`,
     }
-    setSesiones((previo) => [...previo, nuevaSesion])
+    const nuevosSesiones = [...sesiones, nuevaSesion]
+    setSesiones(nuevosSesiones)
+    void guardarSesionesInmediatamente(nuevosSesiones, feedbackSesiones)
     // descartar el match usado para avanzar al siguiente
     setDescartesMatchPorFecha((previo) => ({
       ...previo,
@@ -1802,36 +1862,45 @@ function App() {
           return
         }
 
-        if (Array.isArray(remoto.jugadores)) {
+        // Merge inteligente: solo actualizar colecciones que cambiaron (diferentes versiones)
+        const remotoVersions = remoto.versions ?? {}
+
+        if (Array.isArray(remoto.jugadores) && remotoVersions.jugadores !== versionesLocales.current.jugadores) {
           const jugadoresRemotos = normalizarJugadores(remoto.jugadores)
           setJugadores(jugadoresRemotos)
           setJugadorActivoId((actual) =>
             jugadoresRemotos.some((jugador) => jugador.id === actual) ? actual : (jugadoresRemotos[0]?.id ?? 0),
           )
+          versionesLocales.current.jugadores = remotoVersions.jugadores ?? versionesLocales.current.jugadores
         }
 
-        if (Array.isArray(remoto.recursos)) {
+        if (Array.isArray(remoto.recursos) && remotoVersions.recursos !== versionesLocales.current.recursos) {
           setRecursos(mezclarRecursosConIniciales(remoto.recursos))
+          versionesLocales.current.recursos = remotoVersions.recursos ?? versionesLocales.current.recursos
         }
 
-        if (Array.isArray(remoto.entrenadores)) {
+        if (Array.isArray(remoto.entrenadores) && remotoVersions.entrenadores !== versionesLocales.current.entrenadores) {
           const entrenadoresRemotos = normalizarEntrenadores(remoto.entrenadores)
           setEntrenadores(entrenadoresRemotos)
           setEntrenadorActivoId((actual) =>
             entrenadoresRemotos.some((entrenador) => entrenador.id === actual) ? actual : (entrenadoresRemotos[0]?.id ?? 0),
           )
+          versionesLocales.current.entrenadores = remotoVersions.entrenadores ?? versionesLocales.current.entrenadores
         }
 
-        if (Array.isArray(remoto.sesiones)) {
+        if (Array.isArray(remoto.sesiones) && remotoVersions.sesiones !== versionesLocales.current.sesiones) {
           setSesiones(remoto.sesiones)
+          versionesLocales.current.sesiones = remotoVersions.sesiones ?? versionesLocales.current.sesiones
         }
 
-        if (Array.isArray(remoto.feedbackSesiones)) {
+        if (Array.isArray(remoto.feedbackSesiones) && remotoVersions.feedbackSesiones !== versionesLocales.current.feedbackSesiones) {
           setFeedbackSesiones(remoto.feedbackSesiones)
+          versionesLocales.current.feedbackSesiones = remotoVersions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
         }
 
-        if (Array.isArray(remoto.permisos)) {
+        if (Array.isArray(remoto.permisos) && remotoVersions.permisos !== versionesLocales.current.permisos) {
           setPermisos(normalizarPermisos(remoto.permisos))
+          versionesLocales.current.permisos = remotoVersions.permisos ?? versionesLocales.current.permisos
         }
 
         if (Array.isArray(remoto.sedes)) {
@@ -1869,7 +1938,7 @@ function App() {
     }
 
     const temporizador = window.setTimeout(() => {
-      // Filtrar elementos que coinciden exactamente con los valores iniciales
+      // Guardar solo datos que no son sesiones (sesiones se controlan por endpoint separado)
       void (async () => {
         try {
           const respuesta = await fetch(API_STATE_URL, {
@@ -1881,17 +1950,21 @@ function App() {
               jugadores,
               recursos,
               entrenadores,
-              sesiones,
-              feedbackSesiones,
+              sesiones, // Se envía pero backend debería idempotente si no cambia
+              feedbackSesiones, // Se envía pero backend debería idempotente
               permisos,
               sedes,
+              versions: versionesLocales.current,
             }),
           })
 
           if (!respuesta.ok) return
-          const payload = (await respuesta.json()) as { updatedAt?: string }
+          const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
           if (typeof payload.updatedAt === 'string') {
             ultimoUpdatedAtRemoto.current = payload.updatedAt
+          }
+          if (payload.versions) {
+            versionesLocales.current = payload.versions as typeof versionesLocales.current
           }
         } catch {
         }
@@ -1901,7 +1974,7 @@ function App() {
     return () => {
       window.clearTimeout(temporizador)
     }
-  }, [estadoRemotoCargado, jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes])
+  }, [estadoRemotoCargado, jugadores, recursos, entrenadores, permisos, sedes])
 
   useEffect(() => {
     if (jugadores.length === 0) {

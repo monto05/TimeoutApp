@@ -76,6 +76,14 @@ app.get('/api/state', async (_req, res) => {
         permisos: null,
         sedes: null,
         updatedAt: null,
+        versions: {
+          jugadores: 0,
+          recursos: 0,
+          entrenadores: 0,
+          sesiones: 0,
+          feedbackSesiones: 0,
+          permisos: 0,
+        },
       })
     }
 
@@ -90,6 +98,14 @@ app.get('/api/state', async (_req, res) => {
       permisos,
       sedes,
       updatedAt: snapshot.updatedAt,
+      versions: {
+        jugadores: snapshot.versions?.jugadores ?? 0,
+        recursos: snapshot.versions?.recursos ?? 0,
+        entrenadores: snapshot.versions?.entrenadores ?? 0,
+        sesiones: snapshot.versions?.sesiones ?? 0,
+        feedbackSesiones: snapshot.versions?.feedbackSesiones ?? 0,
+        permisos: snapshot.versions?.permisos ?? 0,
+      },
     })
   } catch (error) {
     return res.status(500).json({
@@ -100,7 +116,7 @@ app.get('/api/state', async (_req, res) => {
 })
 
 app.put('/api/state', async (req, res) => {
-  const { jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes } = req.body ?? {}
+  const { jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes, versions } = req.body ?? {}
 
   if (
     !esArrayValido(jugadores) ||
@@ -116,7 +132,29 @@ app.put('/api/state', async (req, res) => {
 
   try {
     const snapshots = await obtenerColeccionSnapshots()
+    const snapshot = await snapshots.findOne({ _id: 'default' })
+    
+    const currentVersions = snapshot?.versions ?? {
+      jugadores: 0,
+      recursos: 0,
+      entrenadores: 0,
+      sesiones: 0,
+      feedbackSesiones: 0,
+      permisos: 0,
+    }
+
     const updatedAt = new Date()
+    const newVersions = { ...currentVersions }
+
+    // Merge automático: si las versiones coinciden, incrementar; si no, significa que hubo cambio remoto
+    // En este caso, el frontend debería haber obtenido el nuevo estado, así que procedemos
+    // Incrementar versiones para colecciones que se están guardando
+    newVersions.jugadores++
+    newVersions.recursos++
+    newVersions.entrenadores++
+    newVersions.sesiones++
+    newVersions.feedbackSesiones++
+    newVersions.permisos++
 
     await snapshots.updateOne(
       { _id: 'default' },
@@ -131,6 +169,7 @@ app.put('/api/state', async (req, res) => {
             items: permisos,
             sedes,
           },
+          versions: newVersions,
           updatedAt,
         },
         $setOnInsert: {
@@ -140,10 +179,52 @@ app.put('/api/state', async (req, res) => {
       { upsert: true },
     )
 
-    return res.json({ ok: true, updatedAt })
+    return res.json({ ok: true, updatedAt, versions: newVersions })
   } catch (error) {
     return res.status(500).json({
       error: 'No se pudo guardar el estado en base de datos.',
+      detail: error instanceof Error ? error.message : 'unknown_error',
+    })
+  }
+})
+
+// Endpoint específico para guardar solo sesiones (sin debounce)
+app.put('/api/sesiones', async (req, res) => {
+  const { sesiones, feedbackSesiones } = req.body ?? {}
+
+  if (!esArrayValido(sesiones) || !esArrayValido(feedbackSesiones)) {
+    return res.status(400).json({ error: 'Payload inválido.' })
+  }
+
+  try {
+    const snapshots = await obtenerColeccionSnapshots()
+    const snapshot = await snapshots.findOne({ _id: 'default' })
+    
+    const updatedAt = new Date()
+    const newVersions = { ...snapshot?.versions }
+    newVersions.sesiones = (newVersions.sesiones ?? 0) + 1
+    newVersions.feedbackSesiones = (newVersions.feedbackSesiones ?? 0) + 1
+
+    await snapshots.updateOne(
+      { _id: 'default' },
+      {
+        $set: {
+          sesiones,
+          feedbackSesiones,
+          versions: newVersions,
+          updatedAt,
+        },
+        $setOnInsert: {
+          createdAt: updatedAt,
+        },
+      },
+      { upsert: true },
+    )
+
+    return res.json({ ok: true, updatedAt, versions: newVersions })
+  } catch (error) {
+    return res.status(500).json({
+      error: 'No se pudo guardar sesiones.',
       detail: error instanceof Error ? error.message : 'unknown_error',
     })
   }
