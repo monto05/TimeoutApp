@@ -949,6 +949,11 @@ function App() {
     feedbackSesiones: 0,
     permisos: 0,
   })
+  const timestampCambiosLocales = useRef({
+    sesiones: 0,
+    feedbackSesiones: 0,
+    jugadores: 0,
+  })
 
   const permisosPorCorreo = useMemo(
     () => new Map(permisos.map((permiso) => [normalizarCorreo(permiso.correo), permiso])),
@@ -1561,6 +1566,10 @@ function App() {
     // Guarda sesiones y feedback al backend inmediatamente sin debounce
     if (!estadoRemotoCargado) return
 
+    // Marcar timestamp de cambio local para evitar que el polling sobrescriba
+    timestampCambiosLocales.current.sesiones = Date.now()
+    timestampCambiosLocales.current.feedbackSesiones = Date.now()
+
     try {
       const respuesta = await fetch(API_SESIONES_URL, {
         method: 'PUT',
@@ -1584,6 +1593,9 @@ function App() {
       if (payload.versions) {
         versionesLocales.current.sesiones = payload.versions.sesiones ?? versionesLocales.current.sesiones
         versionesLocales.current.feedbackSesiones = payload.versions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
+        // Limpiar timestamp de cambio local cuando se confirma guardado remoto
+        timestampCambiosLocales.current.sesiones = 0
+        timestampCambiosLocales.current.feedbackSesiones = 0
       }
     } catch {
       // Silenciosamente fallar - los datos están en localStorage
@@ -1593,6 +1605,9 @@ function App() {
   const guardarJugadoresInmediatamente = async (nuevosJugadores: Jugador[]) => {
     // Guarda jugadores al backend inmediatamente sin debounce (para disponibilidad, cambios de datos, etc.)
     if (!estadoRemotoCargado) return
+
+    // Marcar timestamp de cambio local para evitar que el polling sobrescriba
+    timestampCambiosLocales.current.jugadores = Date.now()
 
     try {
       const respuesta = await fetch(API_JUGADORES_URL, {
@@ -1615,6 +1630,8 @@ function App() {
       
       if (payload.versions) {
         versionesLocales.current.jugadores = payload.versions.jugadores ?? versionesLocales.current.jugadores
+        // Limpiar timestamp de cambio local cuando se confirma guardado remoto
+        timestampCambiosLocales.current.jugadores = 0
       }
     } catch {
       // Silenciosamente fallar - los datos están en localStorage
@@ -1901,15 +1918,23 @@ function App() {
         }
 
         // Merge inteligente: solo actualizar colecciones que cambiaron (diferentes versiones)
+        // Y NO sobrescribir si hay cambios locales pendientes
         const remotoVersions = remoto.versions ?? {}
+        const ahora = Date.now()
+        const VENTANA_CAMBIOS_PENDIENTES_MS = 5000 // 5 segundos
 
         if (Array.isArray(remoto.jugadores) && remotoVersions.jugadores !== versionesLocales.current.jugadores) {
-          const jugadoresRemotos = normalizarJugadores(remoto.jugadores)
-          setJugadores(jugadoresRemotos)
-          setJugadorActivoId((actual) =>
-            jugadoresRemotos.some((jugador) => jugador.id === actual) ? actual : (jugadoresRemotos[0]?.id ?? 0),
-          )
-          versionesLocales.current.jugadores = remotoVersions.jugadores ?? versionesLocales.current.jugadores
+          // No sobrescribir si hay cambios locales pendientes
+          if (ahora - timestampCambiosLocales.current.jugadores < VENTANA_CAMBIOS_PENDIENTES_MS) {
+            // Cambio local pendiente - ignorar remoto por ahora
+          } else {
+            const jugadoresRemotos = normalizarJugadores(remoto.jugadores)
+            setJugadores(jugadoresRemotos)
+            setJugadorActivoId((actual) =>
+              jugadoresRemotos.some((jugador) => jugador.id === actual) ? actual : (jugadoresRemotos[0]?.id ?? 0),
+            )
+            versionesLocales.current.jugadores = remotoVersions.jugadores ?? versionesLocales.current.jugadores
+          }
         }
 
         if (Array.isArray(remoto.recursos) && remotoVersions.recursos !== versionesLocales.current.recursos) {
@@ -1927,13 +1952,23 @@ function App() {
         }
 
         if (Array.isArray(remoto.sesiones) && remotoVersions.sesiones !== versionesLocales.current.sesiones) {
-          setSesiones(remoto.sesiones)
-          versionesLocales.current.sesiones = remotoVersions.sesiones ?? versionesLocales.current.sesiones
+          // No sobrescribir si hay cambios locales pendientes
+          if (ahora - timestampCambiosLocales.current.sesiones < VENTANA_CAMBIOS_PENDIENTES_MS) {
+            // Cambio local pendiente - ignorar remoto por ahora
+          } else {
+            setSesiones(remoto.sesiones)
+            versionesLocales.current.sesiones = remotoVersions.sesiones ?? versionesLocales.current.sesiones
+          }
         }
 
         if (Array.isArray(remoto.feedbackSesiones) && remotoVersions.feedbackSesiones !== versionesLocales.current.feedbackSesiones) {
-          setFeedbackSesiones(remoto.feedbackSesiones)
-          versionesLocales.current.feedbackSesiones = remotoVersions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
+          // No sobrescribir si hay cambios locales pendientes
+          if (ahora - timestampCambiosLocales.current.feedbackSesiones < VENTANA_CAMBIOS_PENDIENTES_MS) {
+            // Cambio local pendiente - ignorar remoto por ahora
+          } else {
+            setFeedbackSesiones(remoto.feedbackSesiones)
+            versionesLocales.current.feedbackSesiones = remotoVersions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
+          }
         }
 
         if (Array.isArray(remoto.permisos) && remotoVersions.permisos !== versionesLocales.current.permisos) {
