@@ -230,6 +230,46 @@ app.put('/api/sesiones', async (req, res) => {
   }
 })
 
+// Endpoint específico para guardar solo jugadores (sin debounce)
+app.put('/api/jugadores', async (req, res) => {
+  const { jugadores } = req.body ?? {}
+
+  if (!esArrayValido(jugadores)) {
+    return res.status(400).json({ error: 'Payload inválido.' })
+  }
+
+  try {
+    const snapshots = await obtenerColeccionSnapshots()
+    const snapshot = await snapshots.findOne({ _id: 'default' })
+    
+    const updatedAt = new Date()
+    const newVersions = { ...snapshot?.versions }
+    newVersions.jugadores = (newVersions.jugadores ?? 0) + 1
+
+    await snapshots.updateOne(
+      { _id: 'default' },
+      {
+        $set: {
+          jugadores,
+          versions: newVersions,
+          updatedAt,
+        },
+        $setOnInsert: {
+          createdAt: updatedAt,
+        },
+      },
+      { upsert: true },
+    )
+
+    return res.json({ ok: true, updatedAt, versions: newVersions })
+  } catch (error) {
+    return res.status(500).json({
+      error: 'No se pudo guardar jugadores.',
+      detail: error instanceof Error ? error.message : 'unknown_error',
+    })
+  }
+})
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API Timeout escuchando en http://0.0.0.0:${PORT}`)
 })

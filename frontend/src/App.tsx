@@ -112,6 +112,7 @@ type EstadoRemoto = {
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
 const API_STATE_URL = `${API_BASE_URL}/api/state`
 const API_SESIONES_URL = `${API_BASE_URL}/api/sesiones`
+const API_JUGADORES_URL = `${API_BASE_URL}/api/jugadores`
 const API_SYNC_DEBOUNCE_MS = 900
 const API_POLL_INTERVAL_MS = 1500 // Reducido de 3000 a 1500ms para mejor respuesta en calendario
 
@@ -1322,9 +1323,11 @@ function App() {
     }
     if (!jugadorActivo) return
 
-    setJugadores((previo) =>
-      previo.map((jugador) => (jugador.id === jugadorActivo.id ? { ...jugador, [campo]: valor } : jugador)),
+    const nuevosJugadores = jugadores.map((jugador) =>
+      jugador.id === jugadorActivo.id ? { ...jugador, [campo]: valor } : jugador,
     )
+    setJugadores(nuevosJugadores)
+    void guardarJugadoresInmediatamente(nuevosJugadores)
   }
 
   const actualizarProgresoAspecto = (nombreAspecto: string, progreso: number) => {
@@ -1334,18 +1337,18 @@ function App() {
     }
     if (!jugadorActivo) return
 
-    setJugadores((previo) =>
-      previo.map((jugador) => {
-        if (jugador.id !== jugadorActivo.id) return jugador
+    const nuevosJugadores = jugadores.map((jugador) => {
+      if (jugador.id !== jugadorActivo.id) return jugador
 
-        return {
-          ...jugador,
-          aspectos: jugador.aspectos.map((aspecto) =>
-            aspecto.nombre === nombreAspecto ? { ...aspecto, progreso } : aspecto,
-          ),
-        }
-      }),
-    )
+      return {
+        ...jugador,
+        aspectos: jugador.aspectos.map((aspecto) =>
+          aspecto.nombre === nombreAspecto ? { ...aspecto, progreso } : aspecto,
+        ),
+      }
+    })
+    setJugadores(nuevosJugadores)
+    void guardarJugadoresInmediatamente(nuevosJugadores)
   }
 
   const alternarDisponibilidadJugador = (jugadorId: number, fecha: string) => {
@@ -1355,18 +1358,19 @@ function App() {
     }
     if (!fecha) return
 
-    setJugadores((previo) =>
-      previo.map((jugador) => {
-        if (jugador.id !== jugadorId) return jugador
-        const yaDisponible = jugador.disponibilidadFechas.includes(fecha)
-        return {
-          ...jugador,
-          disponibilidadFechas: yaDisponible
-            ? jugador.disponibilidadFechas.filter((item) => item !== fecha)
-            : [...jugador.disponibilidadFechas, fecha],
-        }
-      }),
-    )
+    const nuevosJugadores = jugadores.map((jugador) => {
+      if (jugador.id !== jugadorId) return jugador
+      const yaDisponible = jugador.disponibilidadFechas.includes(fecha)
+      return {
+        ...jugador,
+        disponibilidadFechas: yaDisponible
+          ? jugador.disponibilidadFechas.filter((item) => item !== fecha)
+          : [...jugador.disponibilidadFechas, fecha],
+      }
+    })
+
+    setJugadores(nuevosJugadores)
+    void guardarJugadoresInmediatamente(nuevosJugadores)
   }
 
   const anadirJugador = () => {
@@ -1409,7 +1413,9 @@ function App() {
       disponibilidadFechas: [],
     }
 
-    setJugadores([...jugadores, nuevoJugador])
+    const nuevosJugadores = [...jugadores, nuevoJugador]
+    setJugadores(nuevosJugadores)
+    void guardarJugadoresInmediatamente(nuevosJugadores)
     setJugadorActivoId(siguienteId)
     setFormNuevoJugador({
       nombre: '',
@@ -1432,6 +1438,7 @@ function App() {
 
     const restantes = jugadores.filter((jugador) => jugador.id !== jugadorActivo.id)
     setJugadores(restantes)
+    void guardarJugadoresInmediatamente(restantes)
     setJugadorActivoId(restantes[0]?.id ?? 0)
   }
 
@@ -1577,6 +1584,37 @@ function App() {
       if (payload.versions) {
         versionesLocales.current.sesiones = payload.versions.sesiones ?? versionesLocales.current.sesiones
         versionesLocales.current.feedbackSesiones = payload.versions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
+      }
+    } catch {
+      // Silenciosamente fallar - los datos están en localStorage
+    }
+  }
+
+  const guardarJugadoresInmediatamente = async (nuevosJugadores: Jugador[]) => {
+    // Guarda jugadores al backend inmediatamente sin debounce (para disponibilidad, cambios de datos, etc.)
+    if (!estadoRemotoCargado) return
+
+    try {
+      const respuesta = await fetch(API_JUGADORES_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jugadores: nuevosJugadores,
+        }),
+      })
+
+      if (!respuesta.ok) return
+
+      const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
+      
+      if (typeof payload.updatedAt === 'string') {
+        ultimoUpdatedAtRemoto.current = payload.updatedAt
+      }
+      
+      if (payload.versions) {
+        versionesLocales.current.jugadores = payload.versions.jugadores ?? versionesLocales.current.jugadores
       }
     } catch {
       // Silenciosamente fallar - los datos están en localStorage
