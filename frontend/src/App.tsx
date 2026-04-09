@@ -113,6 +113,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\
 const API_STATE_URL = `${API_BASE_URL}/api/state`
 const API_SESIONES_URL = `${API_BASE_URL}/api/sesiones`
 const API_JUGADORES_URL = `${API_BASE_URL}/api/jugadores`
+const API_ADMIN_URL = `${API_BASE_URL}/api/admin-data`
 const API_SYNC_DEBOUNCE_MS = 900
 const API_POLL_INTERVAL_MS = 1500 // Reducido de 3000 a 1500ms para mejor respuesta en calendario
 
@@ -953,6 +954,9 @@ function App() {
     sesiones: 0,
     feedbackSesiones: 0,
     jugadores: 0,
+    recursos: 0,
+    entrenadores: 0,
+    permisos: 0,
   })
 
   const permisosPorCorreo = useMemo(
@@ -1069,7 +1073,9 @@ function App() {
       return
     }
 
-    setPermisos((previo) => [...previo, { correo, password }])
+    const nuevosPermisos = [...permisos, { correo, password }]
+    setPermisos(nuevosPermisos)
+    void guardarAdministracionInmediatamente(recursos, entrenadores, nuevosPermisos, sedes)
     setMensajeRegistro('Usuario creado. Ya puedes iniciar sesión con ese correo.')
     setCorreoLogin(correo)
     setPasoLogin('password')
@@ -1473,7 +1479,9 @@ function App() {
       descripcion,
     }
 
-    setRecursos((previo) => normalizarRecursos([...previo, nuevoRecurso]))
+    const nuevosRecursos = normalizarRecursos([...recursos, nuevoRecurso])
+    setRecursos(nuevosRecursos)
+    void guardarAdministracionInmediatamente(nuevosRecursos, entrenadores, permisos, sedes)
     setFormNuevoConcepto((previo) => ({ ...previo, nombre: '', descripcion: '' }))
   }
 
@@ -1482,13 +1490,15 @@ function App() {
       registrarBloqueo('Intento de eliminar concepto sin permisos.')
       return
     }
-    setRecursos((previo) => previo.filter((recurso) => recurso.id !== recursoId))
-    setJugadores((previo) =>
-      previo.map((jugador) => ({
-        ...jugador,
-        recursosTrabajados: jugador.recursosTrabajados.filter((id) => id !== recursoId),
-      })),
-    )
+    const nuevosRecursos = recursos.filter((recurso) => recurso.id !== recursoId)
+    const nuevosJugadores = jugadores.map((jugador) => ({
+      ...jugador,
+      recursosTrabajados: jugador.recursosTrabajados.filter((id) => id !== recursoId),
+    }))
+    setRecursos(nuevosRecursos)
+    setJugadores(nuevosJugadores)
+    void guardarAdministracionInmediatamente(nuevosRecursos, entrenadores, permisos, sedes)
+    void guardarJugadoresInmediatamente(nuevosJugadores)
   }
 
   const anadirEntrenador = () => {
@@ -1520,7 +1530,9 @@ function App() {
       telefono,
     }
 
-    setEntrenadores((previo) => [...previo, nuevoEntrenador])
+    const nuevosEntrenadores = [...entrenadores, nuevoEntrenador]
+    setEntrenadores(nuevosEntrenadores)
+    void guardarAdministracionInmediatamente(recursos, nuevosEntrenadores, permisos, sedes)
     setEntrenadorActivoId(siguienteId)
     setFormNuevoEntrenador({ nombre: '', fotoUrl: '', especialidad: '', experiencia: '1', email: '', telefono: '' })
     setMensajeEntrenador('Entrenador añadido correctamente.')
@@ -1533,11 +1545,11 @@ function App() {
     }
     if (!entrenadorActivo) return
 
-    setEntrenadores((previo) =>
-      previo.map((entrenador) =>
-        entrenador.id === entrenadorActivo.id ? { ...entrenador, [campo]: valor } : entrenador,
-      ),
+    const nuevosEntrenadores = entrenadores.map((entrenador) =>
+      entrenador.id === entrenadorActivo.id ? { ...entrenador, [campo]: valor } : entrenador,
     )
+    setEntrenadores(nuevosEntrenadores)
+    void guardarAdministracionInmediatamente(recursos, nuevosEntrenadores, permisos, sedes)
   }
 
   const eliminarEntrenadorActivo = () => {
@@ -1548,9 +1560,12 @@ function App() {
     if (!entrenadorActivo) return
 
     const restantes = entrenadores.filter((entrenador) => entrenador.id !== entrenadorActivo.id)
+    const nuevasSesiones = sesiones.filter((sesion) => sesion.entrenadorId !== entrenadorActivo.id)
     setEntrenadores(restantes)
     setEntrenadorActivoId(restantes[0]?.id ?? 0)
-    setSesiones((previo) => previo.filter((sesion) => sesion.entrenadorId !== entrenadorActivo.id))
+    setSesiones(nuevasSesiones)
+    void guardarAdministracionInmediatamente(recursos, restantes, permisos, sedes)
+    void guardarSesionesInmediatamente(nuevasSesiones, feedbackSesiones)
   }
 
   const alternarJugadorEnSesion = (jugadorId: number) => {
@@ -1657,6 +1672,57 @@ function App() {
     } catch (error) {
       // Error de red - mantener timestamp activo para reintentar
       console.error('Error al guardar jugadores:', error)
+      return
+    }
+  }
+
+  const guardarAdministracionInmediatamente = async (
+    nuevosRecursos: Recurso[],
+    nuevosEntrenadores: Entrenador[],
+    nuevosPermisos: PermisoUsuario[],
+    nuevasSedes: Sede[],
+  ) => {
+    timestampCambiosLocales.current.recursos = Date.now()
+    timestampCambiosLocales.current.entrenadores = Date.now()
+    timestampCambiosLocales.current.permisos = Date.now()
+
+    if (!estadoRemotoCargado) {
+      return
+    }
+
+    try {
+      const respuesta = await fetch(API_ADMIN_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recursos: nuevosRecursos,
+          entrenadores: nuevosEntrenadores,
+          permisos: nuevosPermisos,
+          sedes: nuevasSedes,
+        }),
+      })
+
+      if (!respuesta.ok) {
+        return
+      }
+
+      const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
+      if (typeof payload.updatedAt === 'string') {
+        ultimoUpdatedAtRemoto.current = payload.updatedAt
+      }
+
+      if (payload.versions) {
+        versionesLocales.current.recursos = payload.versions.recursos ?? versionesLocales.current.recursos
+        versionesLocales.current.entrenadores = payload.versions.entrenadores ?? versionesLocales.current.entrenadores
+        versionesLocales.current.permisos = payload.versions.permisos ?? versionesLocales.current.permisos
+        timestampCambiosLocales.current.recursos = 0
+        timestampCambiosLocales.current.entrenadores = 0
+        timestampCambiosLocales.current.permisos = 0
+      }
+    } catch (error) {
+      console.error('Error al guardar administración:', error)
       return
     }
   }
@@ -1833,24 +1899,27 @@ function App() {
     const password = formNuevoPermiso.password.trim()
     if (!correo.includes('@')) return
 
-    setPermisos((previo) => {
-      const existente = previo.find((permiso) => normalizarCorreo(permiso.correo) === correo)
-      if (existente) {
-        return previo.map((permiso) =>
-          normalizarCorreo(permiso.correo) === correo ? { ...permiso, password: password || permiso.password } : permiso,
-        )
-      }
+    const existente = permisos.find((permiso) => normalizarCorreo(permiso.correo) === correo)
+    let nuevosPermisos = permisos
+    if (existente) {
+      nuevosPermisos = permisos.map((permiso) =>
+        normalizarCorreo(permiso.correo) === correo ? { ...permiso, password: password || permiso.password } : permiso,
+      )
+    } else {
+      if (password.length < 4) return
+      nuevosPermisos = [...permisos, { correo, password }]
+    }
 
-      if (password.length < 4) return previo
-
-      return [...previo, { correo, password }]
-    })
+    setPermisos(nuevosPermisos)
+    void guardarAdministracionInmediatamente(recursos, entrenadores, nuevosPermisos, sedes)
 
     setFormNuevoPermiso({ correo: '', password: '' })
   }
 
   const eliminarPermiso = (correo: string) => {
-    setPermisos((previo) => previo.filter((permiso) => normalizarCorreo(permiso.correo) !== normalizarCorreo(correo)))
+    const nuevosPermisos = permisos.filter((permiso) => normalizarCorreo(permiso.correo) !== normalizarCorreo(correo))
+    setPermisos(nuevosPermisos)
+    void guardarAdministracionInmediatamente(recursos, entrenadores, nuevosPermisos, sedes)
   }
 
   const anadirSede = () => {
@@ -1866,7 +1935,9 @@ function App() {
       return
     }
 
-    setSedes((previo) => [...previo, nombre])
+    const nuevasSedes = [...sedes, nombre]
+    setSedes(nuevasSedes)
+    void guardarAdministracionInmediatamente(recursos, entrenadores, permisos, nuevasSedes)
     setNuevaSede('')
     setMensajeSede('Sede añadida.')
   }
@@ -1883,7 +1954,9 @@ function App() {
       return
     }
 
-    setSedes((previo) => previo.filter((item) => item !== sede))
+    const nuevasSedes = sedes.filter((item) => item !== sede)
+    setSedes(nuevasSedes)
+    void guardarAdministracionInmediatamente(recursos, entrenadores, permisos, nuevasSedes)
     setMensajeSede('Sede eliminada.')
   }
 
@@ -1977,17 +2050,23 @@ function App() {
         }
 
         if (Array.isArray(remoto.recursos) && remotoVersions.recursos !== versionesLocales.current.recursos) {
-          setRecursos(mezclarRecursosConIniciales(remoto.recursos))
-          versionesLocales.current.recursos = remotoVersions.recursos ?? versionesLocales.current.recursos
+          if (ahora - timestampCambiosLocales.current.recursos < VENTANA_CAMBIOS_PENDIENTES_MS) {
+          } else {
+            setRecursos(mezclarRecursosConIniciales(remoto.recursos))
+            versionesLocales.current.recursos = remotoVersions.recursos ?? versionesLocales.current.recursos
+          }
         }
 
         if (Array.isArray(remoto.entrenadores) && remotoVersions.entrenadores !== versionesLocales.current.entrenadores) {
-          const entrenadoresRemotos = normalizarEntrenadores(remoto.entrenadores)
-          setEntrenadores(entrenadoresRemotos)
-          setEntrenadorActivoId((actual) =>
-            entrenadoresRemotos.some((entrenador) => entrenador.id === actual) ? actual : (entrenadoresRemotos[0]?.id ?? 0),
-          )
-          versionesLocales.current.entrenadores = remotoVersions.entrenadores ?? versionesLocales.current.entrenadores
+          if (ahora - timestampCambiosLocales.current.entrenadores < VENTANA_CAMBIOS_PENDIENTES_MS) {
+          } else {
+            const entrenadoresRemotos = normalizarEntrenadores(remoto.entrenadores)
+            setEntrenadores(entrenadoresRemotos)
+            setEntrenadorActivoId((actual) =>
+              entrenadoresRemotos.some((entrenador) => entrenador.id === actual) ? actual : (entrenadoresRemotos[0]?.id ?? 0),
+            )
+            versionesLocales.current.entrenadores = remotoVersions.entrenadores ?? versionesLocales.current.entrenadores
+          }
         }
 
         if (Array.isArray(remoto.sesiones) && remotoVersions.sesiones !== versionesLocales.current.sesiones) {
@@ -2011,12 +2090,18 @@ function App() {
         }
 
         if (Array.isArray(remoto.permisos) && remotoVersions.permisos !== versionesLocales.current.permisos) {
-          setPermisos(normalizarPermisos(remoto.permisos))
-          versionesLocales.current.permisos = remotoVersions.permisos ?? versionesLocales.current.permisos
+          if (ahora - timestampCambiosLocales.current.permisos < VENTANA_CAMBIOS_PENDIENTES_MS) {
+          } else {
+            setPermisos(normalizarPermisos(remoto.permisos))
+            versionesLocales.current.permisos = remotoVersions.permisos ?? versionesLocales.current.permisos
+          }
         }
 
         if (Array.isArray(remoto.sedes)) {
-          setSedes(normalizarSedes(remoto.sedes))
+          if (ahora - timestampCambiosLocales.current.permisos < VENTANA_CAMBIOS_PENDIENTES_MS) {
+          } else {
+            setSedes(normalizarSedes(remoto.sedes))
+          }
         }
 
         if (updatedAtRemoto) {

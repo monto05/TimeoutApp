@@ -304,6 +304,71 @@ app.put('/api/jugadores', async (req, res) => {
   }
 })
 
+app.put('/api/admin-data', async (req, res) => {
+  const { recursos, entrenadores, permisos, sedes } = req.body ?? {}
+
+  if (!esArrayValido(recursos) || !esArrayValido(entrenadores) || !esArrayValido(permisos) || !esArrayValido(sedes)) {
+    return res.status(400).json({ error: 'Payload inválido.' })
+  }
+
+  try {
+    const snapshots = await obtenerColeccionSnapshots()
+    const snapshot = await snapshots.findOne({ _id: 'default' })
+
+    const updatedAt = new Date()
+    const newVersions = snapshot?.versions ? { ...snapshot.versions } : {
+      jugadores: 0,
+      recursos: 0,
+      entrenadores: 0,
+      sesiones: 0,
+      feedbackSesiones: 0,
+      permisos: 0,
+    }
+
+    newVersions.recursos = (newVersions.recursos ?? 0) + 1
+    newVersions.entrenadores = (newVersions.entrenadores ?? 0) + 1
+    newVersions.permisos = (newVersions.permisos ?? 0) + 1
+
+    await snapshots.updateOne(
+      { _id: 'default' },
+      {
+        $set: {
+          recursos,
+          entrenadores,
+          permisos: {
+            items: permisos,
+            sedes,
+          },
+          versions: newVersions,
+          updatedAt,
+        },
+        $setOnInsert: {
+          jugadores: [],
+          recursos,
+          entrenadores,
+          sesiones: [],
+          feedbackSesiones: [],
+          permisos: {
+            items: permisos,
+            sedes,
+          },
+          versions: newVersions,
+          createdAt: updatedAt,
+          updatedAt,
+        },
+      },
+      { upsert: true },
+    )
+
+    return res.json({ ok: true, updatedAt, versions: newVersions })
+  } catch (error) {
+    return res.status(500).json({
+      error: 'No se pudo guardar datos de administración.',
+      detail: error instanceof Error ? error.message : 'unknown_error',
+    })
+  }
+})
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`API Timeout escuchando en http://0.0.0.0:${PORT}`)
 })
