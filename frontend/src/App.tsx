@@ -72,6 +72,19 @@ type SesionCalendario = {
   objetivo: string
 }
 
+type FeedbackSesion = {
+  id: number
+  sesionId: number
+  fecha: string
+  hora: string
+  sede: Sede
+  entrenadorId: number
+  jugadorIds: number[]
+  objetivo: string
+  comentario: string
+  creadoEn: string
+}
+
 type PermisoUsuario = {
   correo: string
   password: string
@@ -82,13 +95,16 @@ type EstadoRemoto = {
   recursos?: Recurso[] | null
   entrenadores?: Entrenador[] | null
   sesiones?: SesionCalendario[] | null
+  feedbackSesiones?: FeedbackSesion[] | null
   permisos?: PermisoUsuario[] | null
   sedes?: Sede[] | null
+  updatedAt?: string | null
 }
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/$/, '')
 const API_STATE_URL = `${API_BASE_URL}/api/state`
 const API_SYNC_DEBOUNCE_MS = 900
+const API_POLL_INTERVAL_MS = 3000
 
 const permisosIniciales: PermisoUsuario[] = [
   { correo: 'direccion@timeoutworkouts.com', password: 'timeout123' },
@@ -104,6 +120,7 @@ const STORAGE_KEYS = {
   recursos: 'timeout_app_recursos',
   entrenadores: 'timeout_app_entrenadores',
   sesiones: 'timeout_app_sesiones',
+  feedbackSesiones: 'timeout_app_feedback_sesiones',
   permisos: 'timeout_app_permisos',
   sedes: 'timeout_app_sedes',
 } as const
@@ -829,6 +846,9 @@ function App() {
   const [sesiones, setSesiones] = useState<SesionCalendario[]>(() =>
     leerStorage<SesionCalendario[]>(STORAGE_KEYS.sesiones, sesionesIniciales),
   )
+  const [feedbackSesiones, setFeedbackSesiones] = useState<FeedbackSesion[]>(() =>
+    leerStorage<FeedbackSesion[]>(STORAGE_KEYS.feedbackSesiones, []),
+  )
   const [permisos, setPermisos] = useState<PermisoUsuario[]>(() =>
     normalizarPermisos(leerStorage<PermisoUsuario[]>(STORAGE_KEYS.permisos, permisosIniciales)),
   )
@@ -904,13 +924,27 @@ function App() {
   const [sedes, setSedes] = useState<Sede[]>(() => leerStorage<Sede[]>(STORAGE_KEYS.sedes, sedesIniciales))
   const [nuevaSede, setNuevaSede] = useState('')
   const [mensajeSede, setMensajeSede] = useState('')
+  const [tabJugadorActiva, setTabJugadorActiva] = useState<'plan' | 'comentarios'>('plan')
+  const [sesionFeedbackAbiertaId, setSesionFeedbackAbiertaId] = useState<number | null>(null)
+  const [textoFeedbackSesion, setTextoFeedbackSesion] = useState('')
   const [estadoRemotoCargado, setEstadoRemotoCargado] = useState(false)
   const omitirPrimerGuardadoRemoto = useRef(true)
+  const ultimoUpdatedAtRemoto = useRef<string | null>(null)
 
   const permisosPorCorreo = useMemo(
     () => new Map(permisos.map((permiso) => [normalizarCorreo(permiso.correo), permiso])),
     [permisos],
   )
+  const feedbackPorSesionId = useMemo(
+    () => new Map(feedbackSesiones.map((feedback) => [feedback.sesionId, feedback])),
+    [feedbackSesiones],
+  )
+  const comentariosJugadorActivo = useMemo(() => {
+    if (!jugadorActivoId) return [] as FeedbackSesion[]
+    return feedbackSesiones
+      .filter((feedback) => feedback.jugadorIds.includes(jugadorActivoId))
+      .sort((a, b) => `${b.fecha} ${b.hora}`.localeCompare(`${a.fecha} ${a.hora}`))
+  }, [feedbackSesiones, jugadorActivoId])
   // Temporal: permitir edición a todos los usuarios
   const puedeEditar = true
   const etiquetaInterfaz = {
@@ -1529,6 +1563,46 @@ function App() {
     setSesiones((previo) => previo.filter((sesion) => sesion.id !== sesionId))
   }
 
+  const guardarFeedbackSesion = (sesion: SesionCalendario) => {
+    if (!puedeEditar) {
+      registrarBloqueo('No puedes guardar feedback en modo visualizador.')
+      return
+    }
+
+    const comentario = textoFeedbackSesion.trim()
+    if (!comentario) return
+
+    const existente = feedbackPorSesionId.get(sesion.id)
+
+    if (existente) {
+      setFeedbackSesiones((previo) =>
+        previo.map((feedback) =>
+          feedback.sesionId === sesion.id
+            ? { ...feedback, comentario, creadoEn: new Date().toISOString() }
+            : feedback,
+        ),
+      )
+    } else {
+      const siguienteId = Math.max(0, ...feedbackSesiones.map((feedback) => feedback.id)) + 1
+      const nuevoFeedback: FeedbackSesion = {
+        id: siguienteId,
+        sesionId: sesion.id,
+        fecha: sesion.fecha,
+        hora: sesion.hora,
+        sede: sesion.sede,
+        entrenadorId: sesion.entrenadorId,
+        jugadorIds: sesion.jugadorIds,
+        objetivo: sesion.objetivo,
+        comentario,
+        creadoEn: new Date().toISOString(),
+      }
+      setFeedbackSesiones((previo) => [...previo, nuevoFeedback])
+    }
+
+    setSesionFeedbackAbiertaId(null)
+    setTextoFeedbackSesion('')
+  }
+
   const descartarMatchActual = () => {
     if (!puedeEditar) {
       registrarBloqueo('No puedes usar match en modo visualizador.')
@@ -1650,6 +1724,10 @@ function App() {
   }, [sesiones])
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.feedbackSesiones, JSON.stringify(feedbackSesiones))
+  }, [feedbackSesiones])
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.permisos, JSON.stringify(permisos))
   }, [permisos])
 
@@ -1673,18 +1751,27 @@ function App() {
         if (!respuesta.ok) return
 
         const remoto = (await respuesta.json()) as EstadoRemoto
+        const updatedAtRemoto = typeof remoto.updatedAt === 'string' ? remoto.updatedAt : null
         const remotoTieneDatos = [
           remoto.jugadores,
           remoto.recursos,
           remoto.entrenadores,
           remoto.sesiones,
+          remoto.feedbackSesiones,
           remoto.permisos,
           remoto.sedes,
         ].some((coleccion) => Array.isArray(coleccion) && coleccion.length > 0)
 
         if (cancelado) return
 
+        if (estadoRemotoCargado && updatedAtRemoto && ultimoUpdatedAtRemoto.current === updatedAtRemoto) {
+          return
+        }
+
         if (!remotoTieneDatos) {
+          if (updatedAtRemoto) {
+            ultimoUpdatedAtRemoto.current = updatedAtRemoto
+          }
           omitirPrimerGuardadoRemoto.current = false
           return
         }
@@ -1713,12 +1800,20 @@ function App() {
           setSesiones(remoto.sesiones)
         }
 
+        if (Array.isArray(remoto.feedbackSesiones)) {
+          setFeedbackSesiones(remoto.feedbackSesiones)
+        }
+
         if (Array.isArray(remoto.permisos)) {
           setPermisos(normalizarPermisos(remoto.permisos))
         }
 
         if (Array.isArray(remoto.sedes)) {
           setSedes(normalizarSedes(remoto.sedes))
+        }
+
+        if (updatedAtRemoto) {
+          ultimoUpdatedAtRemoto.current = updatedAtRemoto
         }
       } catch {
       } finally {
@@ -1729,11 +1824,15 @@ function App() {
     }
 
     void cargarEstadoRemoto()
+    const intervalo = window.setInterval(() => {
+      void cargarEstadoRemoto()
+    }, API_POLL_INTERVAL_MS)
 
     return () => {
       cancelado = true
+      window.clearInterval(intervalo)
     }
-  }, [])
+  }, [estadoRemotoCargado])
 
   useEffect(() => {
     if (!estadoRemotoCargado) return
@@ -1745,26 +1844,38 @@ function App() {
 
     const temporizador = window.setTimeout(() => {
       // Filtrar elementos que coinciden exactamente con los valores iniciales
-        void fetch(API_STATE_URL, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            jugadores,
-            recursos,
-            entrenadores,
-            sesiones,
-            permisos,
-            sedes,
-          }),
-        })
+      void (async () => {
+        try {
+          const respuesta = await fetch(API_STATE_URL, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              jugadores,
+              recursos,
+              entrenadores,
+              sesiones,
+              feedbackSesiones,
+              permisos,
+              sedes,
+            }),
+          })
+
+          if (!respuesta.ok) return
+          const payload = (await respuesta.json()) as { updatedAt?: string }
+          if (typeof payload.updatedAt === 'string') {
+            ultimoUpdatedAtRemoto.current = payload.updatedAt
+          }
+        } catch {
+        }
+      })()
     }, API_SYNC_DEBOUNCE_MS)
 
     return () => {
       window.clearTimeout(temporizador)
     }
-  }, [estadoRemotoCargado, jugadores, recursos, entrenadores, sesiones, permisos, sedes])
+  }, [estadoRemotoCargado, jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes])
 
   useEffect(() => {
     if (jugadores.length === 0) {
@@ -2345,6 +2456,33 @@ function App() {
               </span>
             </header>
 
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setTabJugadorActiva('plan')}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                  tabJugadorActiva === 'plan'
+                    ? 'border-blue-300/60 bg-blue-500/20 text-blue-100'
+                    : 'border-white/20 bg-white/5 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                Plan semanal
+              </button>
+              <button
+                type="button"
+                onClick={() => setTabJugadorActiva('comentarios')}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                  tabJugadorActiva === 'comentarios'
+                    ? 'border-fuchsia-300/60 bg-fuchsia-500/20 text-fuchsia-100'
+                    : 'border-white/20 bg-white/5 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                Comentarios ({comentariosJugadorActivo.length})
+              </button>
+            </div>
+
+            {tabJugadorActiva === 'plan' ? (
+            <>
             <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/35 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">Editar jugador</p>
@@ -2563,6 +2701,30 @@ function App() {
             <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-amber-100">
               Regla metodológica: no cambiar de nivel hasta dominar los gestos en varios contextos y handicaps.
             </div>
+            </>
+            ) : (
+              <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/35 p-4">
+                <p className="text-sm font-semibold text-white">Comentarios de sesiones</p>
+                {comentariosJugadorActivo.length === 0 ? (
+                  <p className="mt-3 text-xs text-slate-300">Aún no hay feedback guardado para este jugador.</p>
+                ) : (
+                  <div className="mt-3 grid gap-3">
+                    {comentariosJugadorActivo.map((feedback) => {
+                      const entrenador = entrenadores.find((item) => item.id === feedback.entrenadorId)
+                      return (
+                        <div key={feedback.id} className="rounded-lg border border-white/10 bg-slate-900/50 p-3">
+                          <p className="text-xs font-semibold text-slate-100">
+                            {feedback.fecha} · {feedback.hora} · {feedback.sede}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-300">Entrenador: {entrenador?.nombre ?? 'Sin entrenador'}</p>
+                          <p className="mt-2 text-xs text-slate-200">{feedback.comentario}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
               </>
             ) : null}
 
@@ -3400,14 +3562,61 @@ function App() {
                                                 <p className="mt-1 leading-relaxed text-slate-200">{nombresJugadores || 'Sin jugadores'}</p>
                                                 <div className="mt-2 flex items-center justify-between gap-2">
                                                   <span className="text-[10px] text-slate-300">{sesion.objetivo || 'Sin objetivo'}</span>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => eliminarSesionCalendario(sesion.id)}
-                                                    className="rounded border border-rose-300/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-100"
-                                                  >
-                                                    ×
-                                                  </button>
+                                                  <div className="flex items-center gap-1">
+                                                    {feedbackPorSesionId.has(sesion.id) ? (
+                                                      <span className="rounded border border-emerald-300/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-100">
+                                                        Feedback ✓
+                                                      </span>
+                                                    ) : null}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const existente = feedbackPorSesionId.get(sesion.id)
+                                                        setSesionFeedbackAbiertaId((actual) => (actual === sesion.id ? null : sesion.id))
+                                                        setTextoFeedbackSesion(existente?.comentario ?? '')
+                                                      }}
+                                                      className="rounded border border-fuchsia-300/40 bg-fuchsia-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-100"
+                                                    >
+                                                      📝
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => eliminarSesionCalendario(sesion.id)}
+                                                      className="rounded border border-rose-300/40 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-100"
+                                                    >
+                                                      ×
+                                                    </button>
+                                                  </div>
                                                 </div>
+                                                {sesionFeedbackAbiertaId === sesion.id ? (
+                                                  <div className="mt-2 grid gap-2">
+                                                    <textarea
+                                                      value={textoFeedbackSesion}
+                                                      onChange={(evento) => setTextoFeedbackSesion(evento.target.value)}
+                                                      placeholder="Feedback de la sesión (evolución, actitud, foco técnico, próximos pasos...)"
+                                                      className="min-h-[72px] rounded border border-white/15 bg-slate-900/70 px-2 py-1.5 text-[11px] text-white outline-none placeholder:text-slate-400"
+                                                    />
+                                                    <div className="flex justify-end gap-2">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setSesionFeedbackAbiertaId(null)
+                                                          setTextoFeedbackSesion('')
+                                                        }}
+                                                        className="rounded border border-white/20 px-2 py-1 text-[10px] font-semibold text-slate-200"
+                                                      >
+                                                        Cancelar
+                                                      </button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => guardarFeedbackSesion(sesion)}
+                                                        className="rounded border border-emerald-300/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-emerald-100"
+                                                      >
+                                                        Guardar feedback
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                ) : null}
                                               </div>
                                             )
                                           })}

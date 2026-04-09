@@ -72,6 +72,7 @@ app.get('/api/state', async (_req, res) => {
         recursos: null,
         entrenadores: null,
         sesiones: null,
+        feedbackSesiones: null,
         permisos: null,
         sedes: null,
         updatedAt: null,
@@ -85,6 +86,7 @@ app.get('/api/state', async (_req, res) => {
       recursos: snapshot.recursos,
       entrenadores: snapshot.entrenadores,
       sesiones: snapshot.sesiones,
+      feedbackSesiones: snapshot.feedbackSesiones,
       permisos,
       sedes,
       updatedAt: snapshot.updatedAt,
@@ -98,13 +100,14 @@ app.get('/api/state', async (_req, res) => {
 })
 
 app.put('/api/state', async (req, res) => {
-  const { jugadores, recursos, entrenadores, sesiones, permisos, sedes } = req.body ?? {}
+  const { jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes } = req.body ?? {}
 
   if (
     !esArrayValido(jugadores) ||
     !esArrayValido(recursos) ||
     !esArrayValido(entrenadores) ||
     !esArrayValido(sesiones) ||
+    !esArrayValido(feedbackSesiones) ||
     !esArrayValido(permisos) ||
     !esArrayValido(sedes)
   ) {
@@ -123,6 +126,7 @@ app.put('/api/state', async (req, res) => {
           recursos,
           entrenadores,
           sesiones,
+          feedbackSesiones,
           permisos: {
             items: permisos,
             sedes,
