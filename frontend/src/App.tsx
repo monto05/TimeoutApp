@@ -1569,11 +1569,15 @@ function App() {
 
   const guardarSesionesInmediatamente = async (nuevosSesiones: SesionCalendario[], nuevosFeedback: FeedbackSesion[]) => {
     // Guarda sesiones y feedback al backend inmediatamente sin debounce
-    if (!estadoRemotoCargado) return
-
     // Marcar timestamp de cambio local para evitar que el polling sobrescriba
     timestampCambiosLocales.current.sesiones = Date.now()
     timestampCambiosLocales.current.feedbackSesiones = Date.now()
+
+    // NO retornar si !estadoRemotoCargado - guardar a localStorage siempre funciona
+    if (!estadoRemotoCargado) {
+      // El estado está guardado localmente, solo fallamos al backend por ahora
+      return
+    }
 
     try {
       const respuesta = await fetch(API_SESIONES_URL, {
@@ -1587,7 +1591,10 @@ function App() {
         }),
       })
 
-      if (!respuesta.ok) return
+      if (!respuesta.ok) {
+        // Error del servidor - mantener timestamp activo
+        return
+      }
 
       const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
       
@@ -1598,21 +1605,27 @@ function App() {
       if (payload.versions) {
         versionesLocales.current.sesiones = payload.versions.sesiones ?? versionesLocales.current.sesiones
         versionesLocales.current.feedbackSesiones = payload.versions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
-        // Limpiar timestamp de cambio local cuando se confirma guardado remoto
+        // SOLO limpiar timestamp cuando se confirma guardado exitoso
         timestampCambiosLocales.current.sesiones = 0
         timestampCambiosLocales.current.feedbackSesiones = 0
       }
-    } catch {
-      // Silenciosamente fallar - los datos están en localStorage
+    } catch (error) {
+      // Error de red - mantener timestamp activo para reintentar
+      console.error('Error al guardar sesiones:', error)
+      return
     }
   }
 
   const guardarJugadoresInmediatamente = async (nuevosJugadores: Jugador[]) => {
     // Guarda jugadores al backend inmediatamente sin debounce (para disponibilidad, cambios de datos, etc.)
-    if (!estadoRemotoCargado) return
-
     // Marcar timestamp de cambio local para evitar que el polling sobrescriba
     timestampCambiosLocales.current.jugadores = Date.now()
+
+    // NO retornar si !estadoRemotoCargado - guardar a localStorage siempre funciona
+    if (!estadoRemotoCargado) {
+      // El estado está guardado localmente, solo fallamos al backend por ahora
+      return
+    }
 
     try {
       const respuesta = await fetch(API_JUGADORES_URL, {
@@ -1625,7 +1638,10 @@ function App() {
         }),
       })
 
-      if (!respuesta.ok) return
+      if (!respuesta.ok) {
+        // Error del servidor - mantener timestamp activo
+        return
+      }
 
       const payload = (await respuesta.json()) as { updatedAt?: string; versions?: Record<string, number> }
       
@@ -1635,11 +1651,13 @@ function App() {
       
       if (payload.versions) {
         versionesLocales.current.jugadores = payload.versions.jugadores ?? versionesLocales.current.jugadores
-        // Limpiar timestamp de cambio local cuando se confirma guardado remoto
+        // SOLO limpiar timestamp cuando se confirma guardado exitoso
         timestampCambiosLocales.current.jugadores = 0
       }
-    } catch {
-      // Silenciosamente fallar - los datos están en localStorage
+    } catch (error) {
+      // Error de red - mantener timestamp activo para reintentar
+      console.error('Error al guardar jugadores:', error)
+      return
     }
   }
 
@@ -1942,7 +1960,7 @@ function App() {
         // Y NO sobrescribir si hay cambios locales pendientes
         const remotoVersions = remoto.versions ?? {}
         const ahora = Date.now()
-        const VENTANA_CAMBIOS_PENDIENTES_MS = 5000 // 5 segundos
+        const VENTANA_CAMBIOS_PENDIENTES_MS = 10000 // 10 segundos - tiempo suficiente para confirmación del servidor
 
         if (Array.isArray(remoto.jugadores) && remotoVersions.jugadores !== versionesLocales.current.jugadores) {
           // No sobrescribir si hay cambios locales pendientes

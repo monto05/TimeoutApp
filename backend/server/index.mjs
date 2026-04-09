@@ -201,7 +201,15 @@ app.put('/api/sesiones', async (req, res) => {
     const snapshot = await snapshots.findOne({ _id: 'default' })
     
     const updatedAt = new Date()
-    const newVersions = { ...snapshot?.versions }
+    const newVersions = snapshot?.versions ? { ...snapshot.versions } : {
+      jugadores: 0,
+      recursos: 0,
+      entrenadores: 0,
+      sesiones: 0,
+      feedbackSesiones: 0,
+      permisos: 0,
+    }
+    
     newVersions.sesiones = (newVersions.sesiones ?? 0) + 1
     newVersions.feedbackSesiones = (newVersions.feedbackSesiones ?? 0) + 1
 
@@ -209,13 +217,22 @@ app.put('/api/sesiones', async (req, res) => {
       { _id: 'default' },
       {
         $set: {
-          sesiones,
-          feedbackSesiones,
+          sesiones, // Sobrescribir sesiones
+          feedbackSesiones, // Sobrescribir feedback
           versions: newVersions,
           updatedAt,
         },
         $setOnInsert: {
+          // Inicializar documento si no existe
+          jugadores: [],
+          recursos: [],
+          entrenadores: [],
+          sesiones,
+          feedbackSesiones,
+          permisos: { items: [], sedes: [] },
+          versions: newVersions,
           createdAt: updatedAt,
+          updatedAt,
         },
       },
       { upsert: true },
@@ -243,7 +260,15 @@ app.put('/api/jugadores', async (req, res) => {
     const snapshot = await snapshots.findOne({ _id: 'default' })
     
     const updatedAt = new Date()
-    const newVersions = { ...snapshot?.versions }
+    const newVersions = snapshot?.versions ? { ...snapshot.versions } : {
+      jugadores: 0,
+      recursos: 0,
+      entrenadores: 0,
+      sesiones: 0,
+      feedbackSesiones: 0,
+      permisos: 0,
+    }
+    
     newVersions.jugadores = (newVersions.jugadores ?? 0) + 1
 
     await snapshots.updateOne(
@@ -255,7 +280,16 @@ app.put('/api/jugadores', async (req, res) => {
           updatedAt,
         },
         $setOnInsert: {
+          // Inicializar documento si no existe
+          jugadores,
+          recursos: [],
+          entrenadores: [],
+          sesiones: [],
+          feedbackSesiones: [],
+          permisos: { items: [], sedes: [] },
+          versions: newVersions,
           createdAt: updatedAt,
+          updatedAt,
         },
       },
       { upsert: true },
