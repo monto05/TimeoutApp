@@ -1164,10 +1164,15 @@ function App() {
   const nuevaSesionTieneConflicto = useMemo(() => {
     if (!formNuevaSesion.fecha || !formNuevaSesion.hora) return false
 
+    // Solo es conflicto VERDADERO si:
+    // 1. Misma fecha y hora
+    // 2. Y misma sede (dos sesiones no pueden usar el mismo espacio)
+    // 3. O mismo entrenador (un entrenador no puede estar en 2 sesiones)
     return sesiones.some((sesion) => {
       const mismaFechaHora = sesion.fecha === formNuevaSesion.fecha && sesion.hora === formNuevaSesion.hora
       if (!mismaFechaHora) return false
 
+      // Conflicto si misma sede O mismo entrenador
       const conflictoSede = sesion.sede === formNuevaSesion.sede
       const conflictoEntrenador = formNuevaSesion.entrenadorId > 0 && sesion.entrenadorId === formNuevaSesion.entrenadorId
       return conflictoSede || conflictoEntrenador
@@ -1644,14 +1649,30 @@ function App() {
       return
     }
     const objetivo = formNuevaSesion.objetivo.trim()
-    if (
-      !formNuevaSesion.fecha ||
-      !formNuevaSesion.hora ||
-      !formNuevaSesion.entrenadorId ||
-      formNuevaSesion.jugadorIds.length === 0 ||
-      !objetivo ||
-      jugadoresNoDisponiblesEnSesion.length > 0
-    ) {
+    
+    // Validaciones detalladas para mejor feedback
+    if (!formNuevaSesion.fecha) {
+      alert('Selecciona una fecha para la sesión.')
+      return
+    }
+    if (!formNuevaSesion.hora) {
+      alert('Selecciona una hora para la sesión.')
+      return
+    }
+    if (!formNuevaSesion.entrenadorId) {
+      alert('Selecciona un entrenador para la sesión.')
+      return
+    }
+    if (formNuevaSesion.jugadorIds.length === 0) {
+      alert('Selecciona al menos un jugador para la sesión.')
+      return
+    }
+    if (!objetivo) {
+      alert('Añade un objetivo para la sesión.')
+      return
+    }
+    if (jugadoresNoDisponiblesEnSesion.length > 0) {
+      alert(`Los siguientes jugadores no están disponibles: ${jugadoresNoDisponiblesEnSesion.map((j) => j.nombre).join(', ')}`)
       return
     }
 
@@ -3700,7 +3721,7 @@ function App() {
 
                       {nuevaSesionTieneConflicto ? (
                         <p className="rounded-lg border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 lg:col-span-2">
-                          Atención: hay posible solape de horario (misma hora y sede o mismo entrenador).
+                          <span className="font-semibold">⚠️ Atención:</span> Esta sesión está en conflicto (misma sede u otro entrenador ya tiene sesión a esa hora). Revisa si es intencional.
                         </p>
                       ) : null}
 
