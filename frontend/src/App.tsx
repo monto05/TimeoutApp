@@ -90,6 +90,13 @@ type PermisoUsuario = {
   password: string
 }
 
+type InterfazGestion =
+  | 'gestion-jugadores'
+  | 'gestion-conceptos'
+  | 'gestion-entrenadores'
+  | 'gestion-calendario'
+  | 'gestion-permisos'
+
 type EstadoRemoto = {
   jugadores?: Jugador[] | null
   recursos?: Recurso[] | null
@@ -762,6 +769,13 @@ const bloquesRecurso: BloqueRecurso[] = ['Técnica']
 const categoriasJugador = Object.keys(plantillaAspectosPorCategoria)
 const diasSemanaNombre = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 const horasSugeridas = ['09:00', '10:00', '11:00', '12:00', '13:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00']
+const opcionesInterfazGestion: Array<{ value: InterfazGestion; label: string }> = [
+  { value: 'gestion-jugadores', label: 'Jugadores' },
+  { value: 'gestion-conceptos', label: 'Biblioteca de recursos' },
+  { value: 'gestion-entrenadores', label: 'Entrenadores' },
+  { value: 'gestion-calendario', label: 'Calendario' },
+  { value: 'gestion-permisos', label: 'Usuarios' },
+]
 
 function formatearFechaISO(fecha: Date) {
   const anio = fecha.getFullYear()
@@ -838,6 +852,7 @@ function archivoADataUrl(archivo: File): Promise<string> {
 
 function App() {
   const [vista, setVista] = useState<'inicio' | 'panel' | 'jugadores'>('inicio')
+  const [modoControlInputs, setModoControlInputs] = useState(true)
   const [jugadores, setJugadores] = useState<Jugador[]>(() =>
     normalizarJugadores(leerStorage<Jugador[]>(STORAGE_KEYS.jugadores, [])),
   )
@@ -875,9 +890,7 @@ function App() {
   const [grupoRecursoActivo, setGrupoRecursoActivo] = useState<GrupoRecurso>('Recursos')
   const [posicionRecursoActiva, setPosicionRecursoActiva] = useState<PosicionRecurso>('Base')
   const [nivelRecursoActivo, setNivelRecursoActivo] = useState<NivelRecurso>('Bronce')
-  const [interfaz, setInterfaz] = useState<
-    'gestion-jugadores' | 'gestion-conceptos' | 'gestion-entrenadores' | 'gestion-calendario' | 'gestion-permisos'
-  >('gestion-jugadores')
+  const [interfaz, setInterfaz] = useState<InterfazGestion>('gestion-jugadores')
   const [seccionesCalendarioAbiertas, setSeccionesCalendarioAbiertas] = useState({
     disponibilidad: true,
     programar: false,
@@ -985,14 +998,7 @@ function App() {
 
   const registrarBloqueo = (_motivo: string) => {}
 
-  const abrirInterfaz = (
-    siguienteInterfaz:
-      | 'gestion-jugadores'
-      | 'gestion-conceptos'
-      | 'gestion-entrenadores'
-      | 'gestion-calendario'
-      | 'gestion-permisos',
-  ) => {
+  const abrirInterfaz = (siguienteInterfaz: InterfazGestion) => {
     setInterfaz(siguienteInterfaz)
     setVista('jugadores')
   }
@@ -2199,6 +2205,133 @@ function App() {
     <main className="relative min-h-screen overflow-hidden bg-slate-950 px-6 py-10 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.22),transparent_55%),radial-gradient(circle_at_80%_20%,rgba(168,85,247,0.18),transparent_45%)]" />
 
+      {vista !== 'inicio' ? (
+        <section className="relative mx-auto mb-6 w-full max-w-6xl rounded-2xl border border-cyan-300/25 bg-cyan-500/10 p-4 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-100">Control por inputs</p>
+              <p className="text-xs text-cyan-50/90">Selecciona opciones y se mostraran las GUIs correspondientes.</p>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-cyan-50">
+              <input
+                type="checkbox"
+                checked={modoControlInputs}
+                onChange={(evento) => setModoControlInputs(evento.target.checked)}
+                className="h-4 w-4 rounded border-cyan-200/60 bg-slate-950/80"
+              />
+              Activar modo input
+            </label>
+          </div>
+
+          {modoControlInputs ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="grid gap-1 text-xs text-cyan-50/90">
+                Vista
+                <select
+                  value={vista}
+                  onChange={(evento) => setVista(evento.target.value as 'panel' | 'jugadores')}
+                  className="rounded-lg border border-cyan-200/25 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="panel">Panel</option>
+                  <option value="jugadores">Gestor</option>
+                </select>
+              </label>
+
+              {vista === 'jugadores' ? (
+                <label className="grid gap-1 text-xs text-cyan-50/90">
+                  GUI
+                  <select
+                    value={interfaz}
+                    onChange={(evento) => setInterfaz(evento.target.value as InterfazGestion)}
+                    className="rounded-lg border border-cyan-200/25 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {opcionesInterfazGestion.map((opcion) => (
+                      <option key={opcion.value} value={opcion.value}>
+                        {opcion.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              {vista === 'jugadores' && interfaz === 'gestion-jugadores' ? (
+                <label className="grid gap-1 text-xs text-cyan-50/90">
+                  Jugador activo
+                  <select
+                    value={jugadorActivoId}
+                    onChange={(evento) => setJugadorActivoId(Number(evento.target.value))}
+                    className="rounded-lg border border-cyan-200/25 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {jugadores.map((jugador) => (
+                      <option key={jugador.id} value={jugador.id}>
+                        {jugador.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              {vista === 'jugadores' && interfaz === 'gestion-entrenadores' ? (
+                <label className="grid gap-1 text-xs text-cyan-50/90">
+                  Entrenador activo
+                  <select
+                    value={entrenadorActivoId}
+                    onChange={(evento) => setEntrenadorActivoId(Number(evento.target.value))}
+                    className="rounded-lg border border-cyan-200/25 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {entrenadores.map((entrenador) => (
+                      <option key={entrenador.id} value={entrenador.id}>
+                        {entrenador.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              {vista === 'jugadores' && interfaz === 'gestion-calendario' ? (
+                <label className="grid gap-1 text-xs text-cyan-50/90">
+                  Fecha activa
+                  <input
+                    type="date"
+                    value={filtroFecha}
+                    onChange={(evento) => setFiltroFecha(evento.target.value)}
+                    className="rounded-lg border border-cyan-200/25 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none"
+                  />
+                </label>
+              ) : null}
+
+              {vista === 'jugadores' && interfaz === 'gestion-jugadores' ? (
+                <fieldset className="rounded-lg border border-cyan-200/20 bg-slate-950/40 px-3 py-2 text-xs text-cyan-50/90">
+                  <legend className="px-1 text-[11px] uppercase tracking-[0.1em] text-cyan-100">Subvista jugador</legend>
+                  <div className="mt-1 flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="tab-jugador"
+                        value="plan"
+                        checked={tabJugadorActiva === 'plan'}
+                        onChange={() => setTabJugadorActiva('plan')}
+                      />
+                      Plan
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="tab-jugador"
+                        value="comentarios"
+                        checked={tabJugadorActiva === 'comentarios'}
+                        onChange={() => setTabJugadorActiva('comentarios')}
+                      />
+                      Comentarios
+                    </label>
+                  </div>
+                </fieldset>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {vista === 'inicio' ? (
         <section className="relative mx-auto flex min-h-[85vh] w-full max-w-5xl items-center rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl md:p-14">
           <div className="mx-auto flex w-full max-w-md flex-col items-center">
@@ -2402,28 +2535,34 @@ function App() {
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {[
-                { key: 'gestion-jugadores', title: 'Jugadores', text: 'Fichas, progreso, planificación individual y seguimiento.' },
-                { key: 'gestion-conceptos', title: 'Biblioteca de recursos', text: 'Recursos por nivel, posición y biblioteca metodológica.' },
-                { key: 'gestion-entrenadores', title: 'Entrenadores', text: 'Equipo técnico, especialidades y datos de contacto.' },
-                { key: 'gestion-calendario', title: 'Calendario', text: 'Disponibilidad, sedes, agenda diaria y vista semanal.' },
-                { key: 'gestion-permisos', title: 'Usuarios', text: 'Correos y contraseñas de acceso a la plataforma.' },
+                {
+                  ...opcionesInterfazGestion[0],
+                  text: 'Fichas, progreso, planificación individual y seguimiento.',
+                },
+                {
+                  ...opcionesInterfazGestion[1],
+                  text: 'Recursos por nivel, posición y biblioteca metodológica.',
+                },
+                {
+                  ...opcionesInterfazGestion[2],
+                  text: 'Equipo técnico, especialidades y datos de contacto.',
+                },
+                {
+                  ...opcionesInterfazGestion[3],
+                  text: 'Disponibilidad, sedes, agenda diaria y vista semanal.',
+                },
+                {
+                  ...opcionesInterfazGestion[4],
+                  text: 'Correos y contraseñas de acceso a la plataforma.',
+                },
               ].map((item) => (
                 <button
-                  key={item.key}
+                  key={item.value}
                   type="button"
-                  onClick={() =>
-                    abrirInterfaz(
-                      item.key as
-                        | 'gestion-jugadores'
-                        | 'gestion-conceptos'
-                        | 'gestion-entrenadores'
-                        | 'gestion-calendario'
-                        | 'gestion-permisos',
-                    )
-                  }
+                  onClick={() => abrirInterfaz(item.value)}
                   className="group rounded-2xl border border-white/10 bg-slate-900/45 p-6 text-left transition hover:border-blue-300/40 hover:bg-slate-900/70"
                 >
-                  <p className="text-lg font-semibold text-white transition group-hover:text-blue-100">{item.title}</p>
+                  <p className="text-lg font-semibold text-white transition group-hover:text-blue-100">{item.label}</p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-300">{item.text}</p>
                   <span className="mt-5 inline-flex rounded-full border border-blue-300/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-100">
                     Entrar
