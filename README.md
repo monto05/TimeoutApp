@@ -50,6 +50,17 @@ npm run dev
 
 La app sincroniza automáticamente su estado con MongoDB por `PUT /api/state` y carga inicial por `GET /api/state`.
 
+## Player Development System
+
+El frontend incluye ahora un módulo adicional de seguimiento del jugador pensado para staff, jugador y familia:
+
+- Objetivos con tracking real por progreso y estado.
+- Historial de sesiones y feedback consolidado.
+- Evaluaciones periódicas por área.
+- Vídeo-feedback con enlace compartido, comentario familiar y corrección técnica.
+- Canal simple de comunicación entre familia y responsables.
+- Informes automáticos generados desde la propia app con el resumen actual del jugador.
+
 ## Build de producción
 
 ```bash

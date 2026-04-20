@@ -7,8 +7,29 @@ const app = express()
 const PORT = Number(process.env.PORT ?? 3001)
 const MONGODB_URL = process.env.MONGODB_URL ?? 'mongodb://127.0.0.1:27017'
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME ?? 'timeout_app'
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
+const AI_MODEL = process.env.AI_MODEL ?? 'gpt-4.1-mini'
 
 const esArrayValido = (valor) => Array.isArray(valor)
+const extraerJsonDeTexto = (texto = '') => {
+  const limpio = texto.trim()
+  if (!limpio) return null
+
+  try {
+    return JSON.parse(limpio)
+  } catch {
+    const inicio = limpio.indexOf('{')
+    const fin = limpio.lastIndexOf('}')
+    if (inicio === -1 || fin === -1 || fin <= inicio) return null
+
+    try {
+      return JSON.parse(limpio.slice(inicio, fin + 1))
+    } catch {
+      return null
+    }
+  }
+}
+
 const extraerPermisosYSedes = (valor) => {
   if (Array.isArray(valor)) {
     return { permisos: valor, sedes: null }
@@ -73,6 +94,7 @@ app.get('/api/state', async (_req, res) => {
         entrenadores: null,
         sesiones: null,
         feedbackSesiones: null,
+        seguimientosJugadores: null,
         permisos: null,
         sedes: null,
         updatedAt: null,
@@ -82,6 +104,7 @@ app.get('/api/state', async (_req, res) => {
           entrenadores: 0,
           sesiones: 0,
           feedbackSesiones: 0,
+          seguimientosJugadores: 0,
           permisos: 0,
         },
       })
@@ -95,6 +118,7 @@ app.get('/api/state', async (_req, res) => {
       entrenadores: snapshot.entrenadores,
       sesiones: snapshot.sesiones,
       feedbackSesiones: snapshot.feedbackSesiones,
+      seguimientosJugadores: snapshot.seguimientosJugadores,
       permisos,
       sedes,
       updatedAt: snapshot.updatedAt,
@@ -104,6 +128,7 @@ app.get('/api/state', async (_req, res) => {
         entrenadores: snapshot.versions?.entrenadores ?? 0,
         sesiones: snapshot.versions?.sesiones ?? 0,
         feedbackSesiones: snapshot.versions?.feedbackSesiones ?? 0,
+        seguimientosJugadores: snapshot.versions?.seguimientosJugadores ?? 0,
         permisos: snapshot.versions?.permisos ?? 0,
       },
     })
@@ -116,7 +141,7 @@ app.get('/api/state', async (_req, res) => {
 })
 
 app.put('/api/state', async (req, res) => {
-  const { jugadores, recursos, entrenadores, sesiones, feedbackSesiones, permisos, sedes, versions } = req.body ?? {}
+  const { jugadores, recursos, entrenadores, sesiones, feedbackSesiones, seguimientosJugadores, permisos, sedes, versions } = req.body ?? {}
 
   if (
     !esArrayValido(jugadores) ||
@@ -124,6 +149,7 @@ app.put('/api/state', async (req, res) => {
     !esArrayValido(entrenadores) ||
     !esArrayValido(sesiones) ||
     !esArrayValido(feedbackSesiones) ||
+    !esArrayValido(seguimientosJugadores) ||
     !esArrayValido(permisos) ||
     !esArrayValido(sedes)
   ) {
@@ -140,6 +166,7 @@ app.put('/api/state', async (req, res) => {
       entrenadores: 0,
       sesiones: 0,
       feedbackSesiones: 0,
+      seguimientosJugadores: 0,
       permisos: 0,
     }
 
@@ -154,6 +181,7 @@ app.put('/api/state', async (req, res) => {
     newVersions.entrenadores++
     newVersions.sesiones++
     newVersions.feedbackSesiones++
+    newVersions.seguimientosJugadores++
     newVersions.permisos++
 
     await snapshots.updateOne(
@@ -165,6 +193,7 @@ app.put('/api/state', async (req, res) => {
           entrenadores,
           sesiones,
           feedbackSesiones,
+          seguimientosJugadores,
           permisos: {
             items: permisos,
             sedes,
@@ -207,6 +236,7 @@ app.put('/api/sesiones', async (req, res) => {
       entrenadores: 0,
       sesiones: 0,
       feedbackSesiones: 0,
+      seguimientosJugadores: 0,
       permisos: 0,
     }
     
@@ -229,6 +259,7 @@ app.put('/api/sesiones', async (req, res) => {
           entrenadores: [],
           sesiones,
           feedbackSesiones,
+          seguimientosJugadores: [],
           permisos: { items: [], sedes: [] },
           versions: newVersions,
           createdAt: updatedAt,
@@ -266,6 +297,7 @@ app.put('/api/jugadores', async (req, res) => {
       entrenadores: 0,
       sesiones: 0,
       feedbackSesiones: 0,
+      seguimientosJugadores: 0,
       permisos: 0,
     }
     
@@ -286,6 +318,7 @@ app.put('/api/jugadores', async (req, res) => {
           entrenadores: [],
           sesiones: [],
           feedbackSesiones: [],
+          seguimientosJugadores: [],
           permisos: { items: [], sedes: [] },
           versions: newVersions,
           createdAt: updatedAt,
@@ -322,6 +355,7 @@ app.put('/api/admin-data', async (req, res) => {
       entrenadores: 0,
       sesiones: 0,
       feedbackSesiones: 0,
+      seguimientosJugadores: 0,
       permisos: 0,
     }
 
@@ -348,6 +382,7 @@ app.put('/api/admin-data', async (req, res) => {
           entrenadores,
           sesiones: [],
           feedbackSesiones: [],
+          seguimientosJugadores: [],
           permisos: {
             items: permisos,
             sedes,
@@ -366,6 +401,113 @@ app.put('/api/admin-data', async (req, res) => {
       error: 'No se pudo guardar datos de administración.',
       detail: error instanceof Error ? error.message : 'unknown_error',
     })
+  }
+})
+
+app.post('/api/ai/sugerir-objetivo', async (req, res) => {
+  if (!OPENAI_API_KEY) {
+    return res.status(503).json({ error: 'OPENAI_API_KEY no configurada en backend.' })
+  }
+
+  const { fecha, hora, sede, entrenador, jugadores } = req.body ?? {}
+
+  if (!fecha || !hora || !sede || !Array.isArray(jugadores) || jugadores.length === 0) {
+    return res.status(400).json({ error: 'Faltan datos para generar la sugerencia IA.' })
+  }
+
+  const contexto = {
+    fecha,
+    hora,
+    sede,
+    entrenador: entrenador ?? null,
+    jugadores,
+  }
+
+  const systemPrompt = [
+    'Eres un asistente experto en entrenamiento individual de baloncesto para metodologia Timeout Workouts.',
+    'Devuelve SIEMPRE un JSON valido con: objetivo, planBreve, tags.',
+    'objetivo: una frase corta y accionable para campo objetivo.',
+    'planBreve: 2-4 frases maximo con estructura sugerida (activacion, gesto, aplicacion).',
+    'tags: entre 2 y 5 etiquetas cortas.',
+    'No uses markdown ni texto fuera del JSON.',
+  ].join(' ')
+
+  const userPrompt = `Contexto de sesion:\n${JSON.stringify(contexto, null, 2)}`
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 18000)
+
+  try {
+    const respuesta = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: AI_MODEL,
+        temperature: 0.4,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'sugerencia_sesion_timeout',
+            strict: true,
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                objetivo: { type: 'string' },
+                planBreve: { type: 'string' },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  minItems: 2,
+                  maxItems: 5,
+                },
+              },
+              required: ['objetivo', 'planBreve', 'tags'],
+            },
+          },
+        },
+      }),
+    })
+
+    if (!respuesta.ok) {
+      const detalle = await respuesta.text()
+      return res.status(502).json({ error: 'Error al consultar IA externa.', detail: detalle.slice(0, 300) })
+    }
+
+    const payload = await respuesta.json()
+    const contenido = payload?.choices?.[0]?.message?.content
+    const parsed = extraerJsonDeTexto(typeof contenido === 'string' ? contenido : '')
+
+    if (!parsed || typeof parsed.objetivo !== 'string') {
+      return res.status(502).json({ error: 'La IA no devolvio un formato valido.' })
+    }
+
+    const objetivo = parsed.objetivo.trim()
+    const planBreve = typeof parsed.planBreve === 'string' ? parsed.planBreve.trim() : ''
+    const tags = Array.isArray(parsed.tags)
+      ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 5)
+      : []
+
+    if (!objetivo) {
+      return res.status(502).json({ error: 'La IA no devolvio objetivo util.' })
+    }
+
+    return res.json({ objetivo, planBreve, tags })
+  } catch (error) {
+    return res.status(500).json({
+      error: 'No se pudo generar sugerencia IA.',
+      detail: error instanceof Error ? error.message : 'unknown_error',
+    })
+  } finally {
+    clearTimeout(timeout)
   }
 })
 
