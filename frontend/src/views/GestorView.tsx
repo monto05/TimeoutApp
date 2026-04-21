@@ -135,6 +135,8 @@ export function GestorView({
     filtroFecha,
     formNuevaSesion, setFormNuevaSesion,
     formMatch, setFormMatch,
+    opcionTrabajoMatchSeleccionada,
+    setOpcionTrabajoMatchSeleccionada,
     sugerenciaIA,
     cargandoSugerenciaIA,
     errorSugerenciaIA,
@@ -1128,7 +1130,26 @@ export function GestorView({
                       <p className="text-xs text-fuchsia-100">Compatibles para {filtroFecha}</p>
                       <p className="mt-1 text-sm font-semibold text-white">{matchActual.jugadorA.nombre} ↔ {matchActual.jugadorB.nombre}</p>
                       <p className="mt-2 text-xs text-slate-200">Categoría: {matchActual.jugadorA.categoria} · Diferencia de edad: {matchActual.diferenciaEdad} año(s)</p>
-                      <p className="mt-2 text-xs text-slate-200">Recurso(s) pendiente(s) en común: {matchActual.recursosCompartidos.slice(0, 4).join(' · ')}</p>
+                      <p className="mt-2 text-xs text-slate-200">Opciones para trabajar: {matchActual.recursosCompartidos.slice(0, 4).join(' · ')}</p>
+                      <div className="mt-2">
+                        <p className="text-[11px] text-slate-300">Selecciona una opción de trabajo:</p>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {matchActual.recursosCompartidos.map((opcion) => (
+                            <button
+                              key={`match-opcion-${opcion}`}
+                              type="button"
+                              onClick={() => setOpcionTrabajoMatchSeleccionada(opcion)}
+                              className={`rounded border px-2 py-1 text-[10px] font-semibold transition ${
+                                opcionTrabajoMatchSeleccionada === opcion
+                                  ? 'border-emerald-300/60 bg-emerald-500/20 text-emerald-100'
+                                  : 'border-white/20 bg-white/5 text-slate-300 hover:border-white/40'
+                              }`}
+                            >
+                              {opcion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <p className="mt-2 text-xs font-semibold text-fuchsia-100">Score compatibilidad: {matchActual.puntuacionCompatibilidad}</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-3">
                         <div className="grid gap-1">

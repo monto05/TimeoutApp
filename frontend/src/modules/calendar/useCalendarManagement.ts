@@ -99,6 +99,7 @@ export function useCalendarManagement({
   })
   const [descartesMatchPorFecha, setDescartesMatchPorFecha] = useState<Record<string, string[]>>({})
   const [formMatch, setFormMatch] = useState<FormMatch>({ hora: '17:30', sede: sedeInicial, entrenadorId: 0 })
+  const [opcionTrabajoMatchSeleccionada, setOpcionTrabajoMatchSeleccionada] = useState('')
   const [entrenadoresNoDisponiblesPorFecha, setEntrenadoresNoDisponiblesPorFecha] = useState<Record<string, number[]>>(() =>
     leerStorage<Record<string, number[]>>(STORAGE_KEYS.entrenadoresNoDisponibles, {}),
   )
@@ -265,6 +266,17 @@ export function useCalendarManagement({
   }, [descartesMatchPorFecha, filtroFecha, jugadores, jugadoresDisponiblesFecha, recursos])
 
   const matchActual = sugerenciasMatch[0]
+
+  useEffect(() => {
+    if (!matchActual || matchActual.recursosCompartidos.length === 0) {
+      setOpcionTrabajoMatchSeleccionada('')
+      return
+    }
+
+    setOpcionTrabajoMatchSeleccionada((previa) =>
+      matchActual.recursosCompartidos.includes(previa) ? previa : matchActual.recursosCompartidos[0],
+    )
+  }, [matchActual])
 
   const alternarSeccionCalendario = (seccion: keyof SeccionesCalendarioAbiertas) => {
     setSeccionesCalendarioAbiertas((previo) => ({ ...previo, [seccion]: !previo[seccion] }))
@@ -544,7 +556,14 @@ export function useCalendarManagement({
       alert('Selecciona un entrenador para la sesión del match.')
       return
     }
+    if (!opcionTrabajoMatchSeleccionada && matchActual.recursosCompartidos.length > 0) {
+      alert('Selecciona una opción de trabajo para la sesión del match.')
+      return
+    }
     const siguienteId = Math.max(0, ...sesiones.map((s) => s.id)) + 1
+    const objetivoMatch = opcionTrabajoMatchSeleccionada
+      ? `Trabajo compartido: ${opcionTrabajoMatchSeleccionada}`
+      : `Trabajo compartido: ${matchActual.recursosCompartidos.slice(0, 3).join(' · ')}`
     const nuevaSesion: SesionCalendario = {
       id: siguienteId,
       fecha: filtroFecha,
@@ -552,7 +571,7 @@ export function useCalendarManagement({
       sede: formMatch.sede,
       entrenadorId: formMatch.entrenadorId,
       jugadorIds: [matchActual.jugadorA.id, matchActual.jugadorB.id],
-      objetivo: `Trabajo compartido: ${matchActual.recursosCompartidos.slice(0, 3).join(' · ')}`,
+      objetivo: objetivoMatch,
     }
     const nuevasSesiones = [...sesiones, nuevaSesion]
     setSesiones(nuevasSesiones)
@@ -586,6 +605,8 @@ export function useCalendarManagement({
     setFormNuevaSesion,
     formMatch,
     setFormMatch,
+    opcionTrabajoMatchSeleccionada,
+    setOpcionTrabajoMatchSeleccionada,
     sugerenciaIA,
     cargandoSugerenciaIA,
     errorSugerenciaIA,
