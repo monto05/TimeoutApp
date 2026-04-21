@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { API_AI_SUGERIR_OBJETIVO_URL, STORAGE_KEYS } from '../../config/appConfig'
+import { API_AI_SUGERIR_OBJETIVO_LOCAL_URL, API_AI_SUGERIR_OBJETIVO_URL, STORAGE_KEYS } from '../../config/appConfig'
 import { sedesIniciales } from '../../data/appSeeds'
 import { leerStorage } from '../../lib/appHelpers'
 import type {
@@ -331,7 +331,43 @@ export function useCalendarManagement({
     })
   }
 
-  const sugerirObjetivoSesionIA = async () => {
+  const construirPayloadSugerencia = () => {
+    const jugadoresSeleccionados = jugadores
+      .filter((j) => formNuevaSesion.jugadorIds.includes(j.id))
+      .map((jugador) => {
+        const recursosPendientes = recursos
+          .filter((recurso) => !jugador.recursosTrabajados.includes(recurso.id))
+          .map((recurso) => recurso.nombre)
+          .slice(0, 8)
+
+        return {
+          id: jugador.id,
+          nombre: jugador.nombre,
+          categoria: jugador.categoria,
+          posicion: jugador.posicion,
+          edad: jugador.edad,
+          recursosPendientes,
+        }
+      })
+
+    const entrenadorAsignado = entrenadores.find((entrenador) => entrenador.id === formNuevaSesion.entrenadorId)
+
+    return {
+      fecha: formNuevaSesion.fecha,
+      hora: formNuevaSesion.hora,
+      sede: formNuevaSesion.sede,
+      entrenador: entrenadorAsignado
+        ? {
+            id: entrenadorAsignado.id,
+            nombre: entrenadorAsignado.nombre,
+            especialidad: entrenadorAsignado.especialidad,
+          }
+        : null,
+      jugadores: jugadoresSeleccionados,
+    }
+  }
+
+  const pedirSugerenciaIA = async (url: string, mensajeFallo: string) => {
     if (formNuevaSesion.jugadorIds.length === 0) {
       setErrorSugerenciaIA('Selecciona al menos un jugador para pedir sugerencia IA.')
       return
@@ -341,49 +377,17 @@ export function useCalendarManagement({
     setErrorSugerenciaIA('')
 
     try {
-      const jugadoresSeleccionados = jugadores
-        .filter((j) => formNuevaSesion.jugadorIds.includes(j.id))
-        .map((jugador) => {
-          const recursosPendientes = recursos
-            .filter((recurso) => !jugador.recursosTrabajados.includes(recurso.id))
-            .map((recurso) => recurso.nombre)
-            .slice(0, 8)
-
-          return {
-            id: jugador.id,
-            nombre: jugador.nombre,
-            categoria: jugador.categoria,
-            posicion: jugador.posicion,
-            edad: jugador.edad,
-            recursosPendientes,
-          }
-        })
-
-      const entrenadorAsignado = entrenadores.find((entrenador) => entrenador.id === formNuevaSesion.entrenadorId)
-
-      const respuesta = await fetch(API_AI_SUGERIR_OBJETIVO_URL, {
+      const respuesta = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          fecha: formNuevaSesion.fecha,
-          hora: formNuevaSesion.hora,
-          sede: formNuevaSesion.sede,
-          entrenador: entrenadorAsignado
-            ? {
-                id: entrenadorAsignado.id,
-                nombre: entrenadorAsignado.nombre,
-                especialidad: entrenadorAsignado.especialidad,
-              }
-            : null,
-          jugadores: jugadoresSeleccionados,
-        }),
+        body: JSON.stringify(construirPayloadSugerencia()),
       })
 
       if (!respuesta.ok) {
         const payload = (await respuesta.json().catch(() => ({}))) as { error?: string }
-        throw new Error(payload.error || 'No se pudo generar la sugerencia con IA.')
+        throw new Error(payload.error || mensajeFallo)
       }
 
       const payload = (await respuesta.json()) as {
@@ -409,6 +413,14 @@ export function useCalendarManagement({
     } finally {
       setCargandoSugerenciaIA(false)
     }
+  }
+
+  const sugerirObjetivoSesionIA = async () => {
+    await pedirSugerenciaIA(API_AI_SUGERIR_OBJETIVO_URL, 'No se pudo generar la sugerencia con IA.')
+  }
+
+  const sugerirObjetivoSesionIALocal = async () => {
+    await pedirSugerenciaIA(API_AI_SUGERIR_OBJETIVO_LOCAL_URL, 'No se pudo generar la sugerencia local con Ollama.')
   }
 
   const anadirSesionCalendario = () => {
@@ -631,6 +643,7 @@ export function useCalendarManagement({
     alternarDisponibilidadEntrenador,
     alternarJugadorEnSesion,
     sugerirObjetivoSesionIA,
+    sugerirObjetivoSesionIALocal,
     anadirSesionCalendario,
     eliminarSesionCalendario,
     guardarFeedbackSesion,

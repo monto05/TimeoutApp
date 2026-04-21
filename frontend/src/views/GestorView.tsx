@@ -159,6 +159,7 @@ export function GestorView({
     alternarDisponibilidadEntrenador,
     alternarJugadorEnSesion,
     sugerirObjetivoSesionIA,
+    sugerirObjetivoSesionIALocal,
     anadirSesionCalendario,
     eliminarSesionCalendario,
     guardarFeedbackSesion,
@@ -1235,6 +1236,18 @@ export function GestorView({
                         }`}
                       >
                         {cargandoSugerenciaIA ? 'Generando sugerencia...' : 'Sugerir objetivo con IA'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={sugerirObjetivoSesionIALocal}
+                        disabled={cargandoSugerenciaIA}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                          cargandoSugerenciaIA
+                            ? 'cursor-wait border-slate-500/40 bg-slate-600/20 text-slate-300'
+                            : 'border-emerald-300/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25'
+                        }`}
+                      >
+                        {cargandoSugerenciaIA ? 'Generando sugerencia...' : 'Probar IA local (Ollama)'}
                       </button>
                       {sugerenciaIA ? <span className="text-[11px] text-emerald-200">Objetivo autocompletado</span> : null}
                     </div>

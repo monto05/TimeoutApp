@@ -7,6 +7,7 @@ export const API_SESIONES_URL = `${API_BASE_URL}/api/sesiones`
 export const API_JUGADORES_URL = `${API_BASE_URL}/api/jugadores`
 export const API_ADMIN_URL = `${API_BASE_URL}/api/admin-data`
 export const API_AI_SUGERIR_OBJETIVO_URL = `${API_BASE_URL}/api/ai/sugerir-objetivo`
+export const API_AI_SUGERIR_OBJETIVO_LOCAL_URL = `${API_BASE_URL}/api/ai/sugerir-objetivo-local`
 export const API_SYNC_DEBOUNCE_MS = 900
 export const API_POLL_INTERVAL_MS = 1500
 

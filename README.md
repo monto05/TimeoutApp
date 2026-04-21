@@ -68,6 +68,29 @@ npm run build
 npm run preview
 ```
 
+## IA local con Ollama (gratis)
+
+Puedes probar sugerencias de objetivo sin API externa usando Ollama local.
+
+1. Instala Ollama en tu servidor/local: https://ollama.com/download
+2. Descarga un modelo (ejemplo recomendado):
+
+```bash
+ollama pull llama3.1:8b
+```
+
+3. En `backend/.env` configura opcionalmente:
+
+```env
+OLLAMA_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.1:8b
+```
+
+4. Arranca backend y frontend con `npm run dev:all`.
+5. En Calendario > Programar sesión usa el botón "Probar IA local (Ollama)".
+
+Endpoint backend usado: `POST /api/ai/sugerir-objetivo-local`.
+
 ## Scripts útiles por workspace
 
 - Frontend directo: `npm run dev -w frontend`
