@@ -386,8 +386,9 @@ export function useCalendarManagement({
       })
 
       if (!respuesta.ok) {
-        const payload = (await respuesta.json().catch(() => ({}))) as { error?: string }
-        throw new Error(payload.error || mensajeFallo)
+        const payload = (await respuesta.json().catch(() => ({}))) as { error?: string; detail?: string }
+        const detalle = payload.detail ? ` (${payload.detail})` : ''
+        throw new Error((payload.error || mensajeFallo) + detalle)
       }
 
       const payload = (await respuesta.json()) as {

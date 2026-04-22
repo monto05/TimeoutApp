@@ -274,11 +274,8 @@ export function useSnapshotSync({
         }
 
         const remotoVersions = remoto.versions ?? {}
-        const ahora = Date.now()
-        const ventanaCambiosPendientesMs = 10000
-
         if (Array.isArray(remoto.jugadores) && remotoVersions.jugadores !== versionesLocales.current.jugadores) {
-          if (ahora - timestampCambiosLocales.current.jugadores >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.jugadores === 0) {
             const jugadoresRemotos = normalizarJugadores(remoto.jugadores)
             setJugadores(jugadoresRemotos)
             setJugadorActivoId((actual) =>
@@ -289,14 +286,14 @@ export function useSnapshotSync({
         }
 
         if (Array.isArray(remoto.recursos) && remotoVersions.recursos !== versionesLocales.current.recursos) {
-          if (ahora - timestampCambiosLocales.current.recursos >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.recursos === 0) {
             setRecursos(mezclarRecursosConIniciales(remoto.recursos))
             versionesLocales.current.recursos = remotoVersions.recursos ?? versionesLocales.current.recursos
           }
         }
 
         if (Array.isArray(remoto.entrenadores) && remotoVersions.entrenadores !== versionesLocales.current.entrenadores) {
-          if (ahora - timestampCambiosLocales.current.entrenadores >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.entrenadores === 0) {
             const entrenadoresRemotos = normalizarEntrenadores(remoto.entrenadores)
             setEntrenadores(entrenadoresRemotos)
             setEntrenadorActivoId((actual) =>
@@ -307,35 +304,35 @@ export function useSnapshotSync({
         }
 
         if (Array.isArray(remoto.sesiones) && remotoVersions.sesiones !== versionesLocales.current.sesiones) {
-          if (ahora - timestampCambiosLocales.current.sesiones >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.sesiones === 0) {
             setSesiones(remoto.sesiones)
             versionesLocales.current.sesiones = remotoVersions.sesiones ?? versionesLocales.current.sesiones
           }
         }
 
         if (Array.isArray(remoto.feedbackSesiones) && remotoVersions.feedbackSesiones !== versionesLocales.current.feedbackSesiones) {
-          if (ahora - timestampCambiosLocales.current.feedbackSesiones >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.feedbackSesiones === 0) {
             setFeedbackSesiones(remoto.feedbackSesiones)
             versionesLocales.current.feedbackSesiones = remotoVersions.feedbackSesiones ?? versionesLocales.current.feedbackSesiones
           }
         }
 
         if (Array.isArray(remoto.seguimientosJugadores) && remotoVersions.seguimientosJugadores !== versionesLocales.current.seguimientosJugadores) {
-          if (ahora - timestampCambiosLocales.current.seguimientosJugadores >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.seguimientosJugadores === 0) {
             setSeguimientosJugadores(normalizarSeguimientos(remoto.seguimientosJugadores, remoto.jugadores ?? jugadores))
             versionesLocales.current.seguimientosJugadores = remotoVersions.seguimientosJugadores ?? versionesLocales.current.seguimientosJugadores
           }
         }
 
         if (Array.isArray(remoto.permisos) && remotoVersions.permisos !== versionesLocales.current.permisos) {
-          if (ahora - timestampCambiosLocales.current.permisos >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.permisos === 0) {
             setPermisos(normalizarPermisos(remoto.permisos))
             versionesLocales.current.permisos = remotoVersions.permisos ?? versionesLocales.current.permisos
           }
         }
 
         if (Array.isArray(remoto.sedes)) {
-          if (ahora - timestampCambiosLocales.current.permisos >= ventanaCambiosPendientesMs) {
+          if (timestampCambiosLocales.current.permisos === 0) {
             setSedes(normalizarSedes(remoto.sedes))
           }
         }
@@ -411,7 +408,15 @@ export function useSnapshotSync({
           }
           if (payload.versions) {
             versionesLocales.current = payload.versions as VersionesLocales
-            timestampCambiosLocales.current.seguimientosJugadores = 0
+            timestampCambiosLocales.current = {
+              sesiones: 0,
+              feedbackSesiones: 0,
+              jugadores: 0,
+              recursos: 0,
+              entrenadores: 0,
+              seguimientosJugadores: 0,
+              permisos: 0,
+            }
           }
         } catch {
         }
