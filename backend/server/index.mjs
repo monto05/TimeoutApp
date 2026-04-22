@@ -47,6 +47,66 @@ const extraerPermisosYSedes = (valor) => {
   return { permisos: null, sedes: null }
 }
 
+const generarSugerenciaConOllama = async (contexto) => {
+  const prompt = [
+    'Eres un asistente experto en entrenamiento individual de baloncesto para metodologia Timeout Workouts.',
+    'Devuelve SOLO JSON valido con las claves objetivo, planBreve, tags.',
+    'objetivo: frase corta y accionable.',
+    'planBreve: 2-4 frases maximo con estructura activacion, gesto y aplicacion.',
+    'tags: array de 2 a 5 etiquetas cortas.',
+    `Contexto: ${JSON.stringify(contexto)}`,
+  ].join(' ')
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 90000)
+
+  try {
+    const respuesta = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        format: 'json',
+        options: {
+          temperature: 0.4,
+        },
+      }),
+    })
+
+    if (!respuesta.ok) {
+      const detalle = await respuesta.text()
+      throw new Error(`Error al consultar Ollama local: ${detalle.slice(0, 300)}`)
+    }
+
+    const payload = await respuesta.json()
+    const contenido = typeof payload?.response === 'string' ? payload.response : ''
+    const parsed = extraerJsonDeTexto(contenido)
+
+    if (!parsed || typeof parsed.objetivo !== 'string') {
+      throw new Error('Ollama no devolvio un formato valido.')
+    }
+
+    const objetivo = parsed.objetivo.trim()
+    const planBreve = typeof parsed.planBreve === 'string' ? parsed.planBreve.trim() : ''
+    const tags = Array.isArray(parsed.tags)
+      ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 5)
+      : []
+
+    if (!objetivo) {
+      throw new Error('Ollama no devolvio objetivo util.')
+    }
+
+    return { objetivo, planBreve, tags }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 const mongoClient = new MongoClient(MONGODB_URL, {
   serverSelectionTimeoutMS: 3000,
   connectTimeoutMS: 3000,
@@ -407,10 +467,6 @@ app.put('/api/admin-data', async (req, res) => {
 })
 
 app.post('/api/ai/sugerir-objetivo', async (req, res) => {
-  if (!OPENAI_API_KEY) {
-    return res.status(503).json({ error: 'OPENAI_API_KEY no configurada en backend.' })
-  }
-
   const { fecha, hora, sede, entrenador, jugadores } = req.body ?? {}
 
   if (!fecha || !hora || !sede || !Array.isArray(jugadores) || jugadores.length === 0) {
@@ -423,6 +479,18 @@ app.post('/api/ai/sugerir-objetivo', async (req, res) => {
     sede,
     entrenador: entrenador ?? null,
     jugadores,
+  }
+
+  if (!OPENAI_API_KEY) {
+    try {
+      const sugerenciaLocal = await generarSugerenciaConOllama(contexto)
+      return res.json(sugerenciaLocal)
+    } catch (error) {
+      return res.status(502).json({
+        error: 'OPENAI_API_KEY no configurada y fallback local no disponible.',
+        detail: error instanceof Error ? error.message : 'unknown_error',
+      })
+    }
   }
 
   const systemPrompt = [
@@ -528,67 +596,14 @@ app.post('/api/ai/sugerir-objetivo-local', async (req, res) => {
     jugadores,
   }
 
-  const prompt = [
-    'Eres un asistente experto en entrenamiento individual de baloncesto para metodologia Timeout Workouts.',
-    'Devuelve SOLO JSON valido con las claves objetivo, planBreve, tags.',
-    'objetivo: frase corta y accionable.',
-    'planBreve: 2-4 frases maximo con estructura activacion, gesto y aplicacion.',
-    'tags: array de 2 a 5 etiquetas cortas.',
-    `Contexto: ${JSON.stringify(contexto)}`,
-  ].join(' ')
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 25000)
-
   try {
-    const respuesta = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt,
-        stream: false,
-        format: 'json',
-        options: {
-          temperature: 0.4,
-        },
-      }),
-    })
-
-    if (!respuesta.ok) {
-      const detalle = await respuesta.text()
-      return res.status(502).json({ error: 'Error al consultar Ollama local.', detail: detalle.slice(0, 300) })
-    }
-
-    const payload = await respuesta.json()
-    const contenido = typeof payload?.response === 'string' ? payload.response : ''
-    const parsed = extraerJsonDeTexto(contenido)
-
-    if (!parsed || typeof parsed.objetivo !== 'string') {
-      return res.status(502).json({ error: 'Ollama no devolvio un formato valido.' })
-    }
-
-    const objetivo = parsed.objetivo.trim()
-    const planBreve = typeof parsed.planBreve === 'string' ? parsed.planBreve.trim() : ''
-    const tags = Array.isArray(parsed.tags)
-      ? parsed.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 5)
-      : []
-
-    if (!objetivo) {
-      return res.status(502).json({ error: 'Ollama no devolvio objetivo util.' })
-    }
-
-    return res.json({ objetivo, planBreve, tags })
+    const sugerencia = await generarSugerenciaConOllama(contexto)
+    return res.json(sugerencia)
   } catch (error) {
-    return res.status(500).json({
+    return res.status(502).json({
       error: 'No se pudo generar sugerencia IA local.',
       detail: error instanceof Error ? error.message : 'unknown_error',
     })
-  } finally {
-    clearTimeout(timeout)
   }
 })
 
